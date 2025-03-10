@@ -18,6 +18,7 @@ import {
 export default function ControleEstoqueModal({ visible, onClose }) {
   const [estoque, setEstoque] = useState([]);
   const [quantidades, setQuantidades] = useState({});
+  const [searchText, setSearchText] = useState(""); // Novo estado para busca
 
   useEffect(() => {
     let unsubscribe;
@@ -139,13 +140,25 @@ export default function ControleEstoqueModal({ visible, onClose }) {
     </View>
   );
 
+  // Filtra os itens do estoque com base no texto de busca
+  const filteredEstoque = estoque.filter((item) =>
+    item.nome.toLowerCase().includes(searchText.toLowerCase())
+  );
+
   return (
     <Modal visible={visible} transparent animationType="slide">
       <View style={styles.modalContainer}>
         <View style={styles.modalContent}>
           <Text style={styles.titulo}>Controle de Estoque</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar por nome do item"
+            placeholderTextColor="#aaa"
+            value={searchText}
+            onChangeText={setSearchText}
+          />
           <FlatList
-            data={estoque}
+            data={filteredEstoque} // Usa o estoque filtrado
             renderItem={renderItem}
             keyExtractor={(item) => item.id}
             style={styles.flatList}
@@ -178,6 +191,15 @@ const styles = StyleSheet.create({
     fontSize: 20,
     marginBottom: 10,
     textAlign: "center",
+  },
+  searchInput: {
+    height: 40,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 5,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+    fontSize: 16,
   },
   flatList: {
     flexGrow: 0,
