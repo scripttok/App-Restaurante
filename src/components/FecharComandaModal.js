@@ -1,0 +1,551 @@
+import React, { useState, useEffect } from "react";
+import {
+  Modal,
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  Alert,
+  Linking,
+  TouchableOpacity,
+  ScrollView,
+} from "react-native";
+import {
+  fecharMesa,
+  enviarComandaViaWhatsApp,
+  removerPedidosDaMesa,
+} from "../services/mesaService";
+
+export default function FecharComandaModal({
+  visible,
+  onClose,
+  mesa,
+  pedidos,
+  cardapio,
+  onFecharComanda,
+  onAtualizarMesa,
+}) {
+  const [valorPago, setValorPago] = useState("");
+  const [valorRecebido, setValorRecebido] = useState("");
+  const [divisao, setDivisao] = useState("1");
+  const [telefoneCliente, setTelefoneCliente] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      setIsSubmitting(false);
+    };
+  }, []);
+
+  const calcularTotalPedido = (itens) => {
+    const itensValidos = Array.isArray(itens) ? itens : [];
+    return itensValidos
+      .reduce((total, i) => {
+        const itemCardapio = cardapio.find((c) => c.nome === i.nome);
+        const precoUnitario = itemCardapio ? itemCardapio.precoUnitario : 0;
+        return total + (i.quantidade * precoUnitario || 0);
+      }, 0)
+      .toFixed(2);
+  };
+
+  const calcularTotalGeral = () => {
+    if (!pedidos || pedidos.length === 0) return "0.00";
+    return pedidos
+      .reduce((total, pedido) => {
+        return total + parseFloat(calcularTotalPedido(pedido.itens));
+      }, 0)
+      .toFixed(2);
+  };
+
+  const calcularRestante = () => {
+    const total = parseFloat(calcularTotalGeral());
+    const pagoAnterior = mesa?.valorPago || 0;
+    const pagoNovo = parseFloat(valorPago) || 0;
+    return Math.max(0, total - (pagoAnterior + pagoNovo)).toFixed(2);
+  };
+
+  const calcularDivisao = () => {
+    const total = parseFloat(calcularTotalGeral());
+    const numDivisao = parseInt(divisao) || 1;
+    return (total / numDivisao).toFixed(2);
+  };
+
+  const calcularTroco = () => {
+    const recebido = parseFloat(valorRecebido) || 0;
+    const restante = parseFloat(calcularRestante());
+    return Math.max(0, recebido - restante).toFixed(2);
+  };
+
+  const isPagamentoSuficiente = () => {
+    const restante = parseFloat(calcularRestante());
+    const recebido = parseFloat(valorRecebido) || 0;
+    return recebido >= restante;
+  };
+
+  const isPagamentoParcial = () => {
+    const total = parseFloat(calcularTotalGeral());
+    const pagoAnterior = mesa?.valorPago || 0;
+    const pagoNovo = parseFloat(valorPago) || 0;
+    const pagoTotal = pagoAnterior + pagoNovo;
+    return pagoTotal > 0 && pagoTotal < total;
+  };
+
+  const getResumoConta = () => {
+    const itensEntregues = pedidos
+      .filter((p) => p.entregue)
+      .flatMap((p) => p.itens || []);
+    const resumo = itensEntregues.reduce((acc, item) => {
+      acc[item.nome] = (acc[item.nome] || 0) + item.quantidade;
+      return acc;
+    }, {});
+    const itens = Object.entries(resumo).map(([item, quantidade]) => {
+      const itemCardapio = cardapio.find((c) => c.nome === item);
+      const precoUnitario = itemCardapio ? itemCardapio.precoUnitario : 0;
+      return {
+        item,
+        quantidade,
+        precoUnitario,
+        subtotal: precoUnitario * quantidade,
+      };
+    });
+    return {
+      numero: mesa?.numero || "N/A",
+      nomeCliente: mesa?.nomeCliente || "N/A",
+      itens,
+      total: calcularTotalGeral(),
+      pago: (mesa?.valorPago || 0) + (parseFloat(valorPago) || 0),
+      restante: calcularRestante(),
+    };
+  };
+
+  const handleFecharComanda = async () => {
+    if (!mesa || isSubmitting) return;
+    if (!isPagamentoSuficiente()) {
+      Alert.alert(
+        "Erro",
+        "O valor recebido deve ser maior ou igual ao restante a pagar para fechar a comanda."
+      );
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const totalGeral = parseFloat(calcularTotalGeral());
+      const pagoAnterior = mesa?.valorPago || 0;
+      const pagoNovo = parseFloat(valorPago) || 0;
+      const recebido = parseFloat(valorRecebido) || 0;
+      const troco = calcularTroco();
+      const pagoTotal = pagoAnterior + pagoNovo;
+
+      console.log("Fechando comanda:", {
+        mesaId: mesa.id,
+        totalGeral,
+        pagoAnterior,
+        pagoNovo,
+        pagoTotal,
+        recebido,
+        troco,
+      });
+
+      await removerPedidosDaMesa(mesa.numero);
+      await fecharMesa(mesa.id, {
+        valorPago: pagoTotal,
+        valorRestante: 0,
+        valorRecebido: recebido,
+        troco,
+        status: "fechada",
+      });
+      console.log("Atualizando mesa após fechamento total");
+      onAtualizarMesa({
+        ...mesa,
+        valorPago: pagoTotal,
+        valorRestante: 0,
+        valorRecebido: recebido,
+        troco,
+        status: "fechada",
+      });
+      Alert.alert("Sucesso", "Comanda fechada com sucesso!");
+      console.log("Chamando onFecharComanda após fechamento total");
+      onFecharComanda();
+    } catch (error) {
+      Alert.alert(
+        "Erro",
+        `Não foi possível fechar a comanda: ${error.message}`
+      );
+      console.error("Erro ao fechar comanda:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRecebidoParcial = async () => {
+    if (!mesa || isSubmitting) return;
+    const pagoNovo = parseFloat(valorPago) || 0;
+    if (pagoNovo <= 0) {
+      Alert.alert(
+        "Erro",
+        "O valor pago deve ser maior que 0 para registrar um pagamento parcial."
+      );
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const totalGeral = parseFloat(calcularTotalGeral());
+      const pagoAnterior = mesa?.valorPago || 0;
+      const recebido = parseFloat(valorRecebido) || 0;
+      const pagoTotal = pagoAnterior + pagoNovo;
+      const restante = Math.max(0, totalGeral - pagoTotal).toFixed(2);
+      const troco =
+        recebido > pagoNovo ? (recebido - pagoNovo).toFixed(2) : "0.00";
+
+      const updates = {
+        valorPago: pagoTotal,
+        valorRestante: restante,
+        valorRecebido: recebido,
+        troco,
+        status: "aberta",
+      };
+
+      console.log(
+        "Antes de chamar fecharMesa para pagamento parcial:",
+        updates
+      );
+      await fecharMesa(mesa.id, updates);
+      console.log(
+        "Após fecharMesa, atualização enviada para mesaAtual:",
+        updates
+      );
+
+      Alert.alert(
+        "Sucesso",
+        `Pagamento parcial de R$ ${pagoNovo.toFixed(
+          2
+        )} registrado! Restante: R$ ${restante}`
+      );
+      onAtualizarMesa({
+        ...mesa,
+        ...updates,
+      });
+      console.log(
+        "Pagamento parcial registrado, status mantido como 'aberta', mesaAtual atualizada"
+      );
+      setValorPago("");
+      setValorRecebido("");
+    } catch (error) {
+      Alert.alert(
+        "Erro",
+        `Não foi possível registrar o pagamento parcial: ${error.message}`
+      );
+      console.error("Erro ao registrar pagamento parcial:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleEnviarWhatsApp = async () => {
+    if (!mesa || pedidos.length === 0 || isSubmitting) {
+      Alert.alert("Erro", "Nenhum pedido para enviar.");
+      return;
+    }
+    if (!isPagamentoSuficiente()) {
+      Alert.alert(
+        "Erro",
+        "O valor recebido deve ser maior ou igual ao restante para enviar via WhatsApp."
+      );
+      return;
+    }
+
+    let numeroLimpo = telefoneCliente.replace(/[^\d+]/g, "");
+    if (!numeroLimpo) {
+      Alert.alert("Erro", "Por favor, insira um número de telefone.");
+      return;
+    }
+    if (!numeroLimpo.startsWith("+")) {
+      numeroLimpo = `+55${numeroLimpo}`;
+    }
+    if (
+      numeroLimpo.length < 12 ||
+      (numeroLimpo.startsWith("+55") && numeroLimpo.length < 13)
+    ) {
+      Alert.alert(
+        "Erro",
+        "Número inválido. Use o formato DDD + número (ex.: 11987654321) ou internacional (ex.: +12025550123)."
+      );
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const whatsappUrl = enviarComandaViaWhatsApp(
+        mesa.numero,
+        pedidos,
+        cardapio,
+        numeroLimpo
+      );
+
+      const supported = await Linking.canOpenURL(whatsappUrl);
+      if (supported) {
+        await Linking.openURL(whatsappUrl);
+
+        const totalGeral = parseFloat(calcularTotalGeral());
+        const pagoAnterior = parseFloat(mesa?.valorPago || 0);
+        const pagoNovo = parseFloat(valorPago) || totalGeral;
+        const recebido = parseFloat(valorRecebido) || 0;
+        const troco = calcularTroco();
+        const pagoTotal = pagoAnterior + pagoNovo;
+
+        const updates = {
+          valorPago: pagoTotal,
+          valorRestante: 0,
+          valorRecebido: recebido,
+          troco,
+          status: "fechada",
+        };
+
+        await removerPedidosDaMesa(mesa.numero);
+        await fecharMesa(mesa.id, updates);
+        onAtualizarMesa({
+          ...mesa,
+          ...updates,
+        });
+
+        Alert.alert("Sucesso", "Comanda enviada via WhatsApp e fechada!");
+        onFecharComanda();
+      } else {
+        Alert.alert(
+          "Erro",
+          "WhatsApp não está instalado ou não suporta envio de mensagens."
+        );
+      }
+    } catch (error) {
+      Alert.alert(
+        "Erro",
+        `Não foi possível enviar via WhatsApp ou fechar a comanda: ${error.message}`
+      );
+      console.error("Erro ao enviar via WhatsApp:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const CustomButton = ({ title, onPress, color, disabled }) => (
+    <TouchableOpacity
+      style={[
+        styles.button,
+        { backgroundColor: disabled ? "#999" : color || "#5C4329" },
+      ]}
+      onPress={onPress}
+      disabled={disabled}
+    >
+      <Text style={styles.buttonText}>{title}</Text>
+    </TouchableOpacity>
+  );
+
+  return (
+    <Modal visible={visible} transparent animationType="slide">
+      <View style={styles.modalContainer}>
+        <View style={styles.modalContent}>
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            <Text style={styles.titulo}>
+              Fechar Comanda - Mesa {mesa?.numero}
+            </Text>
+            <Text style={styles.totalGeral}>
+              Total Geral: R$ {calcularTotalGeral()}
+            </Text>
+            <Text style={styles.label}>Dividir em quantas partes?</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Ex.: 1"
+              keyboardType="numeric"
+              value={divisao}
+              onChangeText={(text) => setDivisao(text.replace(/[^0-9]/g, ""))}
+              placeholderTextColor="#888"
+            />
+            <Text style={styles.divisao}>
+              Valor por parte: R$ {calcularDivisao()}
+            </Text>
+            <Text style={styles.label}>Valor Pago:</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Digite o valor pago (ex.: 15.00)"
+              keyboardType="numeric"
+              value={valorPago}
+              onChangeText={(text) =>
+                setValorPago(text.replace(/[^0-9.]/g, ""))
+              }
+              placeholderTextColor="#888"
+            />
+            <Text style={styles.label}>Valor Recebido:</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Digite o valor recebido (ex.: 50.00)"
+              keyboardType="numeric"
+              value={valorRecebido}
+              onChangeText={(text) =>
+                setValorRecebido(text.replace(/[^0-9.]/g, ""))
+              }
+              placeholderTextColor="#888"
+            />
+            <Text style={styles.restante}>
+              Restante a Pagar: R$ {calcularRestante()}
+            </Text>
+            {!isPagamentoSuficiente() && isPagamentoParcial() && (
+              <Text style={styles.saldoDevedor}>
+                Saldo Devedor: R$ {calcularRestante()}
+              </Text>
+            )}
+            <Text
+              style={[
+                styles.troco,
+                isPagamentoSuficiente() && styles.trocoDestaque,
+              ]}
+            >
+              Troco: R$ {calcularTroco()}
+            </Text>
+            <Text style={styles.label}>Número do Cliente:</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Número do Cliente (ex.: 11987654321)"
+              keyboardType="phone-pad"
+              value={telefoneCliente}
+              onChangeText={setTelefoneCliente}
+              placeholderTextColor="#888"
+            />
+            <View style={styles.botoes}>
+              <CustomButton
+                title="Enviar via WhatsApp"
+                onPress={handleEnviarWhatsApp}
+                color="#25D366"
+                disabled={!isPagamentoSuficiente() || isSubmitting}
+              />
+              <CustomButton
+                title="Fechar Comanda"
+                onPress={handleFecharComanda}
+                color="#ff4444"
+                disabled={!isPagamentoSuficiente() || isSubmitting}
+              />
+              {isPagamentoParcial() && (
+                <CustomButton
+                  title="Recebido Parcial"
+                  onPress={handleRecebidoParcial}
+                  color="#FFA500"
+                  disabled={isSubmitting}
+                />
+              )}
+              <CustomButton title="Voltar" onPress={onClose} color="#666" />
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// 5C4329 marrom
+
+const styles = StyleSheet.create({
+  modalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+  },
+  modalContent: {
+    width: "90%",
+    maxWidth: 400,
+    borderRadius: 15,
+    backgroundColor: "#5C4329",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 6,
+  },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  titulo: {
+    fontSize: 26,
+    fontWeight: "bold",
+    color: "#FFA500",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  totalGeral: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    textAlign: "center",
+    marginVertical: 15,
+  },
+  label: {
+    fontSize: 16,
+    color: "black",
+    marginBottom: 8,
+    fontWeight: "600",
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#FFFFFF",
+    borderRadius: 10,
+    padding: 12,
+    marginVertical: 10,
+    fontSize: 16,
+    color: "#000000",
+    backgroundColor: "#FFFFFF",
+    textAlign: "left",
+  },
+  divisao: {
+    fontSize: 16,
+    color: "#FFA500",
+    textAlign: "center",
+    marginVertical: 10,
+  },
+  restante: {
+    fontSize: 16,
+    color: "#FFA500",
+    textAlign: "center",
+    marginVertical: 10,
+  },
+  saldoDevedor: {
+    fontSize: 16,
+    color: "#FF4444",
+    textAlign: "center",
+    marginVertical: 10,
+    fontWeight: "600",
+  },
+  troco: {
+    fontSize: 16,
+    color: "#FFFFFF",
+    textAlign: "center",
+    marginVertical: 15,
+  },
+  trocoDestaque: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#28A745",
+  },
+  botoes: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    marginTop: 20,
+    gap: 15,
+  },
+  button: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: "#5C4329",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  buttonText: {
+    color: "#F9D423",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+});
