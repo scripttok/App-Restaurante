@@ -411,27 +411,27 @@ export const adicionarNovoItemCardapio = async (
   nome,
   precoUnitario,
   imagemUrl,
-  categoria
+  categoria,
+  chaveUnica
 ) => {
-  const db = await ensureFirebaseInitialized(); // Retorna a instância do banco de dados
+  const db = await ensureFirebaseInitialized();
   try {
     console.log("(NOBRIDGE) LOG Iniciando adição ao cardápio:", {
       nome,
       precoUnitario,
       imagemUrl,
       categoria,
+      chaveUnica,
     });
 
     const itemData = {
       nome,
       precoUnitario: parseFloat(precoUnitario) || 0,
-      descrição: "Item adicionado via estoque", // Campo obrigatório
-      imagens: imagemUrl ? [imagemUrl] : [], // Campo obrigatório como array
+      descrição: "Item adicionado via estoque",
+      imagens: imagemUrl ? [imagemUrl] : [],
     };
 
-    const chaveUnica = `${categoria.slice(0, 3)}${Date.now()}`; // Ex.: "Lan123456789"
     await db.ref(`cardapio/${categoria}/${chaveUnica}`).set(itemData);
-
     console.log(
       "(NOBRIDGE) LOG Item adicionado ao cardápio com sucesso:",
       itemData
@@ -448,14 +448,12 @@ export const adicionarNovoItemCardapio = async (
 export const removerItemEstoqueECardapio = async (nomeItem, categoria) => {
   const db = await ensureFirebaseInitialized();
   try {
-    // Obter a chave do cardápio associada ao item no estoque
     const snapshot = await db
       .ref(`estoque/${nomeItem}/chaveCardapio`)
       .once("value");
     const chaveCardapio = snapshot.val();
 
     if (chaveCardapio) {
-      // Remover do cardápio
       await db.ref(`cardapio/${categoria}/${chaveCardapio}`).remove();
       console.log(`(NOBRIDGE) LOG Item ${nomeItem} removido do cardápio`);
     } else {
@@ -464,11 +462,51 @@ export const removerItemEstoqueECardapio = async (nomeItem, categoria) => {
       );
     }
 
-    // Remover do estoque
     await db.ref(`estoque/${nomeItem}`).remove();
     console.log(`(NOBRIDGE) LOG Item ${nomeItem} removido do estoque`);
   } catch (error) {
     console.error("(NOBRIDGE) ERROR Erro ao remover item:", {
+      message: error.message,
+      code: error.code,
+    });
+    throw error;
+  }
+};
+
+export const atualizarQuantidadeEstoque = async (
+  nomeItem,
+  novaQuantidade,
+  categoria
+) => {
+  const db = await ensureFirebaseInitialized();
+  try {
+    await db
+      .ref(`estoque/${nomeItem}/quantidade`)
+      .set(parseInt(novaQuantidade, 10));
+    console.log(
+      `(NOBRIDGE) LOG Quantidade de ${nomeItem} atualizada para ${novaQuantidade}`
+    );
+
+    if (parseInt(novaQuantidade, 10) <= 0) {
+      const snapshot = await db
+        .ref(`estoque/${nomeItem}/chaveCardapio`)
+        .once("value");
+      const chaveCardapio = snapshot.val();
+
+      if (chaveCardapio) {
+        await db.ref(`cardapio/${categoria}/${chaveCardapio}`).remove();
+        console.log(
+          `(NOBRIDGE) LOG Item ${nomeItem} removido do cardápio por quantidade zero`
+        );
+      }
+
+      await db.ref(`estoque/${nomeItem}`).remove();
+      console.log(
+        `(NOBRIDGE) LOG Item ${nomeItem} removido do estoque por quantidade zero`
+      );
+    }
+  } catch (error) {
+    console.error("(NOBRIDGE) ERROR Erro ao atualizar quantidade:", {
       message: error.message,
       code: error.code,
     });

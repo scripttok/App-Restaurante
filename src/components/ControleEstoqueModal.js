@@ -13,12 +13,15 @@ import {
   getEstoque,
   adicionarNovoItemEstoque,
   removerEstoque,
+  removerItemEstoqueECardapio,
+  atualizarQuantidadeEstoque,
 } from "../services/mesaService";
+import { ensureFirebaseInitialized } from "../services/firebase";
 
 export default function ControleEstoqueModal({ visible, onClose }) {
   const [estoque, setEstoque] = useState([]);
   const [quantidades, setQuantidades] = useState({});
-  const [searchText, setSearchText] = useState(""); // Novo estado para busca
+  const [searchText, setSearchText] = useState("");
 
   useEffect(() => {
     let unsubscribe;
@@ -60,10 +63,6 @@ export default function ControleEstoqueModal({ visible, onClose }) {
         quantidade: qtdAdicionar,
       });
       await adicionarNovoItemEstoque(nome, qtdAdicionar, "unidades", "0");
-      console.log("Adição ao estoque concluída:", {
-        nome,
-        quantidade: qtdAdicionar,
-      });
       Alert.alert(
         "Sucesso",
         `${qtdAdicionar} unidade(s) de ${nome} adicionada(s) ao estoque!`
@@ -81,7 +80,12 @@ export default function ControleEstoqueModal({ visible, onClose }) {
     }
   };
 
-  const handleRemoverEstoque = async (itemId, nome, quantidadeAtual) => {
+  const handleRemoverEstoque = async (
+    itemId,
+    nome,
+    quantidadeAtual,
+    categoriaItem
+  ) => {
     const qtdRemover = parseFloat(quantidades[itemId]) || 0;
     if (qtdRemover <= 0) {
       Alert.alert("Erro", "Digite uma quantidade válida para remover.");
@@ -96,10 +100,12 @@ export default function ControleEstoqueModal({ visible, onClose }) {
         itemId,
         quantidade: qtdRemover,
       });
-      await removerEstoque(itemId, qtdRemover);
+      const novaQuantidade = quantidadeAtual - qtdRemover;
+      await atualizarQuantidadeEstoque(itemId, novaQuantidade, categoriaItem);
       Alert.alert(
         "Sucesso",
-        `${qtdRemover} unidade(s) de ${nome} removida(s) do estoque!`
+        `${qtdRemover} unidade(s) de ${nome} removida(s) do estoque!` +
+          (novaQuantidade <= 0 ? " Item também removido do cardápio." : "")
       );
       setQuantidades((prev) => ({
         ...prev,
@@ -111,10 +117,33 @@ export default function ControleEstoqueModal({ visible, onClose }) {
     }
   };
 
+  const handleRemoverItemCompleto = async (itemId, nome, categoriaItem) => {
+    try {
+      if (!categoriaItem) {
+        console.log(
+          `(NOBRIDGE) LOG Item ${nome} sem categoria, removendo apenas do estoque`
+        );
+        const db = await ensureFirebaseInitialized();
+        await db.ref(`estoque/${itemId}`).remove();
+        Alert.alert(
+          "Sucesso",
+          `${nome} removido do estoque (sem categoria para cardápio)`
+        );
+      } else {
+        await removerItemEstoqueECardapio(itemId, categoriaItem);
+        Alert.alert("Sucesso", `${nome} removido do estoque e cardápio!`);
+      }
+    } catch (error) {
+      console.error("Erro ao remover item completamente:", error);
+      Alert.alert("Erro", `Não foi possível remover ${nome}: ${error.message}`);
+    }
+  };
+
   const renderItem = ({ item }) => (
     <View style={styles.item}>
       <Text style={styles.itemText}>
-        {item.nome} - {item.quantidade} {item.unidade}
+        {item.nome} - {item.quantidade} {item.unidade}{" "}
+        {item.categoria ? `(${item.categoria})` : ""}
       </Text>
       <TextInput
         style={styles.input}
@@ -132,15 +161,26 @@ export default function ControleEstoqueModal({ visible, onClose }) {
         <Button
           title="Remover"
           onPress={() =>
-            handleRemoverEstoque(item.id, item.nome, item.quantidade)
+            handleRemoverEstoque(
+              item.id,
+              item.nome,
+              item.quantidade,
+              item.categoria
+            )
           }
           color="#ff4444"
+        />
+        <Button
+          title="Remover Tudo"
+          onPress={() =>
+            handleRemoverItemCompleto(item.id, item.nome, item.categoria)
+          }
+          color="#dc3545"
         />
       </View>
     </View>
   );
 
-  // Filtra os itens do estoque com base no texto de busca
   const filteredEstoque = estoque.filter((item) =>
     item.nome.toLowerCase().includes(searchText.toLowerCase())
   );
@@ -158,7 +198,7 @@ export default function ControleEstoqueModal({ visible, onClose }) {
             onChangeText={setSearchText}
           />
           <FlatList
-            data={filteredEstoque} // Usa o estoque filtrado
+            data={filteredEstoque}
             renderItem={renderItem}
             keyExtractor={(item) => item.id}
             style={styles.flatList}

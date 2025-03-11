@@ -14,6 +14,7 @@ import {
   adicionarNovoItemEstoque,
   adicionarNovoItemCardapio,
 } from "../services/mesaService";
+import { ensureFirebaseInitialized } from "../services/firebase";
 
 export default function GerenciarEstoqueCardapioModal({ visible, onClose }) {
   // Campos unificados para estoque e cardápio
@@ -35,7 +36,6 @@ export default function GerenciarEstoqueCardapioModal({ visible, onClose }) {
   ];
 
   const handleAdicionarEstoqueECardapio = async () => {
-    // Validação dos campos obrigatórios
     if (!nomeEstoque || !quantidadeEstoque || !precoUnitario || !categoria) {
       Alert.alert(
         "Erro",
@@ -51,29 +51,43 @@ export default function GerenciarEstoqueCardapioModal({ visible, onClose }) {
     }
 
     try {
-      // Adicionar ao estoque
-      await adicionarNovoItemEstoque(
+      console.log("(NOBRIDGE) LOG Iniciando processo de adição:", {
         nomeLimpo,
         quantidadeEstoque,
-        unidadeEstoque,
-        estoqueMinimo
-      );
+        precoUnitario,
+        categoria,
+      });
 
-      // Adicionar ao cardápio (assumindo que a imagem é opcional)
+      const chaveUnica = `${categoria.slice(0, 3)}${Date.now()}`; // Ex.: "Lan123456789"
+
+      // Adicionar ao estoque com categoria
+      const db = await ensureFirebaseInitialized();
+      const itemEstoque = {
+        nome: nomeLimpo,
+        quantidade: parseInt(quantidadeEstoque, 10),
+        unidade: unidadeEstoque || "unidades",
+        estoqueMinimo: parseInt(estoqueMinimo, 10) || 0,
+        chaveCardapio: chaveUnica,
+        categoria: categoria, // Adicionar a categoria aqui
+      };
+      await db.ref(`estoque/${nomeLimpo}`).set(itemEstoque);
+      console.log("(NOBRIDGE) LOG Estoque adicionado com sucesso");
+
+      // Adicionar ao cardápio
       await adicionarNovoItemCardapio(
         nomeLimpo,
         precoUnitario,
-        "", // URL da imagem
+        "",
         categoria,
-        descricao || "Item adicionado via estoque" // Passe a descrição ou valor padrão
+        chaveUnica
       );
+      console.log("(NOBRIDGE) LOG Cardápio adicionado com sucesso");
 
       Alert.alert(
         "Sucesso",
         `${nomeLimpo} adicionado ao estoque e ao cardápio em ${categoria}!`
       );
 
-      // Limpar os campos após o sucesso
       setNomeEstoque("");
       setQuantidadeEstoque("");
       setUnidadeEstoque("");
@@ -81,6 +95,7 @@ export default function GerenciarEstoqueCardapioModal({ visible, onClose }) {
       setPrecoUnitario("");
       setCategoria("");
     } catch (error) {
+      console.error("(NOBRIDGE) ERROR Erro no processo de adição:", error);
       Alert.alert("Erro", "Não foi possível adicionar: " + error.message);
     }
   };
