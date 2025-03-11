@@ -131,26 +131,52 @@ export default function ControleEstoqueModal({ visible, onClose }) {
       Alert.alert("Erro", "Quantidade a remover excede o estoque atual.");
       return;
     }
-    try {
-      console.log("Tentando remover do estoque:", {
-        itemId,
-        quantidade: qtdRemover,
-      });
-      const novaQuantidade = quantidadeAtual - qtdRemover;
-      await atualizarQuantidadeEstoque(itemId, novaQuantidade, categoriaItem);
-      Alert.alert(
-        "Sucesso",
-        `${qtdRemover} unidade(s) de ${nome} removida(s) do estoque!` +
-          (novaQuantidade <= 0 ? " Item também removido do cardápio." : "")
-      );
-      setQuantidades((prev) => ({
-        ...prev,
-        [itemId]: "",
-      }));
-    } catch (error) {
-      console.error("Erro ao remover do estoque:", error);
-      Alert.alert("Erro", `Não foi possível remover ${nome}: ${error.message}`);
-    }
+
+    const novaQuantidade = quantidadeAtual - qtdRemover;
+    const mensagem =
+      novaQuantidade <= 0
+        ? `Remover ${qtdRemover} unidade(s) de ${nome}? O estoque chegará a zero e o item será removido do estoque e do cardápio.`
+        : `Remover ${qtdRemover} unidade(s) de ${nome}? Novo estoque: ${novaQuantidade}.`;
+
+    showConfirmModal(mensagem, async () => {
+      try {
+        console.log("(NOBRIDGE) LOG Iniciando remoção de estoque:", {
+          itemId,
+          nome,
+          qtdRemover,
+          novaQuantidade,
+          categoria: categoriaItem || "sem categoria",
+        });
+        await atualizarQuantidadeEstoque(
+          itemId,
+          novaQuantidade,
+          categoriaItem || ""
+        );
+        console.log("(NOBRIDGE) LOG Remoção de estoque concluída para:", {
+          itemId,
+          novaQuantidade,
+        });
+        Alert.alert(
+          "Sucesso",
+          `${qtdRemover} unidade(s) de ${nome} removida(s) do estoque!` +
+            (novaQuantidade <= 0 ? " Item também removido do cardápio." : "")
+        );
+        setQuantidades((prev) => ({
+          ...prev,
+          [itemId]: "",
+        }));
+      } catch (error) {
+        console.error("(NOBRIDGE) ERROR Erro ao remover estoque:", {
+          message: error.message,
+          stack: error.stack,
+        });
+        Alert.alert(
+          "Erro",
+          `Não foi possível remover ${nome}: ${error.message}`
+        );
+      }
+      setConfirmModalVisible(false);
+    });
   };
 
   const showConfirmModal = (message, action) => {

@@ -91,10 +91,36 @@ export default function DetalhesMesaModal({
   }, [visible, mesa, pedidos]);
 
   const handleStatusToggle = async (pedidoId, entregueAtual) => {
+    if (entregueAtual) return; // Já entregue, não faz nada
+
+    console.log("(NOBRIDGE) LOG Iniciando atualização de status para pedido:", {
+      pedidoId,
+      novoStatus: !entregueAtual,
+    });
+
     try {
       await atualizarStatusPedido(pedidoId, !entregueAtual);
+      console.log("(NOBRIDGE) LOG Status atualizado com sucesso para:", {
+        pedidoId,
+        status: !entregueAtual,
+      });
+
+      // Atualizar pedidos locais após a mudança
+      const novosPedidos = pedidosLocais.map((pedido) =>
+        pedido.id === pedidoId
+          ? { ...pedido, entregue: !entregueAtual }
+          : pedido
+      );
+      setPedidosLocais(novosPedidos);
     } catch (error) {
-      Alert.alert("Erro", "Não foi possível atualizar o status do pedido.");
+      console.error("(NOBRIDGE) ERROR Erro ao atualizar status do pedido:", {
+        message: error.message,
+        stack: error.stack,
+      });
+      Alert.alert(
+        "Erro",
+        "Não foi possível atualizar o status do pedido: " + error.message
+      );
     }
   };
 
