@@ -407,16 +407,13 @@ export const removerEstoque = async (itemId, quantidade) => {
   }
 };
 
-// src/services/mesaService.js
-// src/services/mesaService.js
 export const adicionarNovoItemCardapio = async (
   nome,
   precoUnitario,
   imagemUrl,
   categoria
 ) => {
-  const firebaseInstance = await ensureFirebaseInitialized();
-  await waitForConnection(firebaseInstance.database());
+  const db = await ensureFirebaseInitialized(); // Retorna a instância do banco de dados
   try {
     console.log("(NOBRIDGE) LOG Iniciando adição ao cardápio:", {
       nome,
@@ -424,31 +421,56 @@ export const adicionarNovoItemCardapio = async (
       imagemUrl,
       categoria,
     });
+
     const itemData = {
       nome,
       precoUnitario: parseFloat(precoUnitario) || 0,
+      descrição: "Item adicionado via estoque", // Campo obrigatório
+      imagens: imagemUrl ? [imagemUrl] : [], // Campo obrigatório como array
     };
 
-    if (imagemUrl) {
-      itemData.imagens = [imagemUrl];
-      console.log("(NOBRIDGE) LOG URL da imagem adicionada:", imagemUrl);
-    }
+    const chaveUnica = `${categoria.slice(0, 3)}${Date.now()}`; // Ex.: "Lan123456789"
+    await db.ref(`cardapio/${categoria}/${chaveUnica}`).set(itemData);
 
-    // Salvar na categoria especificada
-    const ref = firebaseInstance
-      .database()
-      .ref(`cardapio/${categoria}/${nome}`);
-    await ref.set(itemData);
     console.log(
       "(NOBRIDGE) LOG Item adicionado ao cardápio com sucesso:",
       itemData
     );
   } catch (error) {
-    console.error("(NOBRIDGE) ERROR Detalhes do erro:", {
+    console.error("(NOBRIDGE) ERROR Detalhes do erro no cardápio:", {
       message: error.message,
       code: error.code,
-      details: error.details,
-      serverResponse: error.serverResponse,
+    });
+    throw error;
+  }
+};
+
+export const removerItemEstoqueECardapio = async (nomeItem, categoria) => {
+  const db = await ensureFirebaseInitialized();
+  try {
+    // Obter a chave do cardápio associada ao item no estoque
+    const snapshot = await db
+      .ref(`estoque/${nomeItem}/chaveCardapio`)
+      .once("value");
+    const chaveCardapio = snapshot.val();
+
+    if (chaveCardapio) {
+      // Remover do cardápio
+      await db.ref(`cardapio/${categoria}/${chaveCardapio}`).remove();
+      console.log(`(NOBRIDGE) LOG Item ${nomeItem} removido do cardápio`);
+    } else {
+      console.log(
+        `(NOBRIDGE) LOG Nenhuma entrada no cardápio encontrada para ${nomeItem}`
+      );
+    }
+
+    // Remover do estoque
+    await db.ref(`estoque/${nomeItem}`).remove();
+    console.log(`(NOBRIDGE) LOG Item ${nomeItem} removido do estoque`);
+  } catch (error) {
+    console.error("(NOBRIDGE) ERROR Erro ao remover item:", {
+      message: error.message,
+      code: error.code,
     });
     throw error;
   }

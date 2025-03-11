@@ -7,27 +7,23 @@ import {
   StyleSheet,
   Button,
   Alert,
-  ScrollView, // Adicionado ScrollView
+  ScrollView,
 } from "react-native";
-import { Picker } from "@react-native-picker/picker"; // Certifique-se de que isso está correto após a instalação
-
+import { Picker } from "@react-native-picker/picker";
 import {
   adicionarNovoItemEstoque,
   adicionarNovoItemCardapio,
 } from "../services/mesaService";
 
 export default function GerenciarEstoqueCardapioModal({ visible, onClose }) {
-  // Campos para estoque
+  // Campos unificados para estoque e cardápio
   const [nomeEstoque, setNomeEstoque] = useState("");
   const [quantidadeEstoque, setQuantidadeEstoque] = useState("");
   const [unidadeEstoque, setUnidadeEstoque] = useState("");
   const [estoqueMinimo, setEstoqueMinimo] = useState("");
-
-  // Campos para cardápio
-  const [nomeCardapio, setNomeCardapio] = useState("");
   const [precoUnitario, setPrecoUnitario] = useState("");
-  const [imagemUrl, setImagemUrl] = useState("");
   const [categoria, setCategoria] = useState("");
+  const [descricao, setDescricao] = useState("");
 
   // Lista de categorias existentes
   const categorias = [
@@ -38,72 +34,54 @@ export default function GerenciarEstoqueCardapioModal({ visible, onClose }) {
     "Sucos e Agua",
   ];
 
-  const handleAdicionarEstoque = async () => {
-    if (!nomeEstoque || !quantidadeEstoque) {
-      Alert.alert("Erro", "Nome e quantidade são obrigatórios.");
+  const handleAdicionarEstoqueECardapio = async () => {
+    // Validação dos campos obrigatórios
+    if (!nomeEstoque || !quantidadeEstoque || !precoUnitario || !categoria) {
+      Alert.alert(
+        "Erro",
+        "Nome, quantidade, preço unitário e categoria são obrigatórios."
+      );
       return;
     }
+
     const nomeLimpo = nomeEstoque.trim();
     if (!nomeLimpo) {
       Alert.alert("Erro", "O nome do item não pode ser vazio.");
       return;
     }
+
     try {
+      // Adicionar ao estoque
       await adicionarNovoItemEstoque(
         nomeLimpo,
         quantidadeEstoque,
         unidadeEstoque,
         estoqueMinimo
       );
-      Alert.alert("Sucesso", `${nomeLimpo} adicionado ao estoque!`);
+
+      // Adicionar ao cardápio (assumindo que a imagem é opcional)
+      await adicionarNovoItemCardapio(
+        nomeLimpo,
+        precoUnitario,
+        "", // URL da imagem
+        categoria,
+        descricao || "Item adicionado via estoque" // Passe a descrição ou valor padrão
+      );
+
+      Alert.alert(
+        "Sucesso",
+        `${nomeLimpo} adicionado ao estoque e ao cardápio em ${categoria}!`
+      );
+
+      // Limpar os campos após o sucesso
       setNomeEstoque("");
       setQuantidadeEstoque("");
       setUnidadeEstoque("");
       setEstoqueMinimo("");
-    } catch (error) {
-      Alert.alert(
-        "Erro",
-        "Não foi possível adicionar ao estoque: " + error.message
-      );
-    }
-  };
-
-  const handleAdicionarCardapio = async () => {
-    if (!nomeCardapio || !precoUnitario || !categoria) {
-      Alert.alert("Erro", "Nome, preço unitário e categoria são obrigatórios.");
-      return;
-    }
-    const nomeLimpo = nomeCardapio.trim();
-    if (!nomeLimpo) {
-      Alert.alert("Erro", "O nome do item não pode ser vazio.");
-      return;
-    }
-    try {
-      console.log("(NOBRIDGE) LOG Adicionando ao cardápio:", {
-        nome: nomeLimpo,
-        precoUnitario,
-        imagemUrl,
-        categoria,
-      });
-      await adicionarNovoItemCardapio(
-        nomeLimpo,
-        precoUnitario,
-        imagemUrl,
-        categoria
-      );
-      Alert.alert(
-        "Sucesso",
-        `${nomeLimpo} adicionado ao cardápio em ${categoria}!`
-      );
-      setNomeCardapio("");
       setPrecoUnitario("");
-      setImagemUrl("");
       setCategoria("");
     } catch (error) {
-      Alert.alert(
-        "Erro",
-        "Não foi possível adicionar ao cardápio: " + error.message
-      );
+      Alert.alert("Erro", "Não foi possível adicionar: " + error.message);
     }
   };
 
@@ -114,11 +92,13 @@ export default function GerenciarEstoqueCardapioModal({ visible, onClose }) {
           <View style={styles.modalContent}>
             <Text style={styles.titulo}>Gerenciar Estoque e Cardápio</Text>
 
-            {/* Seção para adicionar ao estoque */}
-            <Text style={styles.subtitulo}>Adicionar ao Estoque</Text>
+            {/* Seção unificada para adicionar ao estoque e cardápio */}
+            <Text style={styles.subtitulo}>
+              Adicionar ao Estoque e Cardápio
+            </Text>
             <TextInput
               style={styles.input}
-              placeholder="Nome do item (ex.: Coxinha)"
+              placeholder="Nome do item (ex.: Cerveja)"
               value={nomeEstoque}
               onChangeText={setNomeEstoque}
             />
@@ -137,37 +117,23 @@ export default function GerenciarEstoqueCardapioModal({ visible, onClose }) {
             />
             <TextInput
               style={styles.input}
+              placeholder="Descrição (ex.: Lata 350ml)"
+              value={descricao}
+              onChangeText={setDescricao}
+            />
+            <TextInput
+              style={styles.input}
               placeholder="Estoque Mínimo (ex.: 2)"
               value={estoqueMinimo}
               keyboardType="numeric"
               onChangeText={setEstoqueMinimo}
             />
-            <Button
-              title="Adicionar ao Estoque"
-              onPress={handleAdicionarEstoque}
-              color="#28a745"
-            />
-
-            {/* Seção para adicionar ao cardápio */}
-            <Text style={styles.subtitulo}>Adicionar ao Cardápio</Text>
             <TextInput
               style={styles.input}
-              placeholder="Nome do item (ex.: Suco de Laranja)"
-              value={nomeCardapio}
-              onChangeText={setNomeCardapio}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Preço Unitário (ex.: 7.50)"
+              placeholder="Preço Unitário (ex.: 5.00)"
               value={precoUnitario}
               keyboardType="numeric"
               onChangeText={setPrecoUnitario}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="URL da imagem (ex.: https://exemplo.com/imagem.jpg)"
-              value={imagemUrl}
-              onChangeText={setImagemUrl}
             />
             <Picker
               selectedValue={categoria}
@@ -180,9 +146,9 @@ export default function GerenciarEstoqueCardapioModal({ visible, onClose }) {
               ))}
             </Picker>
             <Button
-              title="Adicionar ao Cardápio"
-              onPress={handleAdicionarCardapio}
-              color="#007bff"
+              title="Adicionar ao Estoque e Cardápio"
+              onPress={handleAdicionarEstoqueECardapio}
+              color="#28a745"
             />
 
             {/* Botão de fechar */}
@@ -204,7 +170,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
   },
   scrollContent: {
-    flexGrow: 1, // Permite que o conteúdo cresça dentro do ScrollView
+    flexGrow: 1,
     justifyContent: "center",
   },
   modalContent: {
