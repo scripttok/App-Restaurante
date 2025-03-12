@@ -304,6 +304,19 @@ export const getCardapio = (callback) => {
   };
 };
 
+const COMBOS_SUBITENS = {
+  "Combo Energético": [
+    { nome: "Água de coco", quantidade: 1 },
+    { nome: "RedBull", quantidade: 1 },
+    { nome: "Coca-Cola", quantidade: 1 },
+  ],
+  "Combo caipirinha": [
+    { nome: "Água de coco", quantidade: 1 },
+    { nome: "RedBull", quantidade: 1 },
+    { nome: "Coca-Cola", quantidade: 1 },
+  ],
+};
+
 export const atualizarStatusPedido = async (pedidoId, novoStatus) => {
   const db = await ensureFirebaseInitialized();
   try {
@@ -314,53 +327,135 @@ export const atualizarStatusPedido = async (pedidoId, novoStatus) => {
     await db.ref(`pedidos/${pedidoId}`).update({ entregue: novoStatus });
 
     if (novoStatus === true) {
-      // Dar baixa no estoque quando o pedido é marcado como entregue
       const pedidoSnapshot = await db.ref(`pedidos/${pedidoId}`).once("value");
       const pedido = pedidoSnapshot.val();
+      console.log("(NOBRIDGE) LOG Dados do pedido recuperado:", pedido);
       const itens = pedido?.itens || [];
 
+      if (!itens.length) {
+        console.warn(
+          "(NOBRIDGE) WARN Nenhum item encontrado no pedido:",
+          pedidoId
+        );
+        return;
+      }
+
       for (const item of itens) {
+        console.log("(NOBRIDGE) LOG Processando item do pedido:", item);
         const { nome, quantidade } = item;
-        console.log("(NOBRIDGE) LOG Baixando estoque para item:", {
-          nome,
-          quantidade,
-        });
 
-        const estoqueSnapshot = await db.ref(`estoque/${nome}`).once("value");
-        const estoqueData = estoqueSnapshot.val();
+        // Verifica se o item é um combo (baseado no mapeamento fixo)
+        if (COMBOS_SUBITENS[nome]) {
+          console.log("(NOBRIDGE) LOG Identificado como combo:", nome);
+          const subItens = COMBOS_SUBITENS[nome];
 
-        if (estoqueData) {
-          const quantidadeAtual = estoqueData.quantidade || 0;
-          const novaQuantidade = Math.max(quantidadeAtual - quantidade, 0);
-
-          if (novaQuantidade > 0) {
-            await db
-              .ref(`estoque/${nome}`)
-              .update({ quantidade: novaQuantidade });
-            console.log("(NOBRIDGE) LOG Estoque atualizado:", {
-              nome,
-              novaQuantidade,
-            });
-          } else {
-            await db.ref(`estoque/${nome}`).remove();
+          for (const subItem of subItens) {
+            const { nome: subItemNome, quantidade: subItemQuantidade } =
+              subItem;
+            const quantidadeTotal = subItemQuantidade * (quantidade || 1);
             console.log(
-              "(NOBRIDGE) LOG Item removido do estoque por zerar:",
-              nome
+              "(NOBRIDGE) LOG Baixando estoque para subitem do combo:",
+              {
+                nome: subItemNome,
+                quantidadeTotal,
+              }
             );
-            if (estoqueData.chaveCardapio && estoqueData.categoria) {
-              await db
-                .ref(
-                  `cardapio/${estoqueData.categoria}/${estoqueData.chaveCardapio}`
-                )
-                .remove();
-              console.log("(NOBRIDGE) LOG Item removido do cardápio:", nome);
+
+            const estoqueSnapshot = await db
+              .ref(`estoque/${subItemNome}`)
+              .once("value");
+            const estoqueData = estoqueSnapshot.val();
+
+            if (estoqueData) {
+              const quantidadeAtual = estoqueData.quantidade || 0;
+              const novaQuantidade = Math.max(
+                quantidadeAtual - quantidadeTotal,
+                0
+              );
+
+              if (novaQuantidade > 0) {
+                await db
+                  .ref(`estoque/${subItemNome}`)
+                  .update({ quantidade: novaQuantidade });
+                console.log("(NOBRIDGE) LOG Estoque atualizado:", {
+                  nome: subItemNome,
+                  novaQuantidade,
+                });
+              } else {
+                await db.ref(`estoque/${subItemNome}`).remove();
+                console.log(
+                  "(NOBRIDGE) LOG Item removido do estoque por zerar:",
+                  subItemNome
+                );
+                if (estoqueData.chaveCardapio && estoqueData.categoria) {
+                  await db
+                    .ref(
+                      `cardapio/${estoqueData.categoria}/${estoqueData.chaveCardapio}`
+                    )
+                    .remove();
+                  console.log(
+                    "(NOBRIDGE) LOG Item removido do cardápio:",
+                    subItemNome
+                  );
+                }
+              }
+            } else {
+              console.warn(
+                "(NOBRIDGE) WARN Item não encontrado no estoque:",
+                subItemNome
+              );
             }
           }
         } else {
-          console.log("(NOBRIDGE) LOG Item não encontrado no estoque:", nome);
+          // Fluxo para itens não-combo
+          console.log("(NOBRIDGE) LOG Baixando estoque para item não-combo:", {
+            nome,
+            quantidade,
+          });
+
+          const estoqueSnapshot = await db.ref(`estoque/${nome}`).once("value");
+          const estoqueData = estoqueSnapshot.val();
+
+          if (estoqueData) {
+            const quantidadeAtual = estoqueData.quantidade || 0;
+            const novaQuantidade = Math.max(quantidadeAtual - quantidade, 0);
+
+            if (novaQuantidade > 0) {
+              await db
+                .ref(`estoque/${nome}`)
+                .update({ quantidade: novaQuantidade });
+              console.log("(NOBRIDGE) LOG Estoque atualizado:", {
+                nome,
+                novaQuantidade,
+              });
+            } else {
+              await db.ref(`estoque/${nome}`).remove();
+              console.log(
+                "(NOBRIDGE) LOG Item removido do estoque por zerar:",
+                nome
+              );
+              if (estoqueData.chaveCardapio && estoqueData.categoria) {
+                await db
+                  .ref(
+                    `cardapio/${estoqueData.categoria}/${estoqueData.chaveCardapio}`
+                  )
+                  .remove();
+                console.log("(NOBRIDGE) LOG Item removido do cardápio:", nome);
+              }
+            }
+          } else {
+            console.warn(
+              "(NOBRIDGE) WARN Item não encontrado no estoque:",
+              nome
+            );
+          }
         }
       }
     }
+    console.log("(NOBRIDGE) LOG Status atualizado com sucesso para:", {
+      pedidoId,
+      status: novoStatus,
+    });
   } catch (error) {
     console.error("(NOBRIDGE) ERROR Erro ao atualizar status:", error);
     throw error;

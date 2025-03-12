@@ -33,6 +33,7 @@ export default function GerenciarEstoqueCardapioModal({ visible, onClose }) {
     "Lanches",
     "Refeições",
     "Sucos e Agua",
+    "Combos",
   ];
 
   const handleAdicionarEstoqueECardapio = async () => {
