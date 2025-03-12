@@ -9,10 +9,11 @@ import {
   DrawerLayoutAndroid,
   ScrollView,
   TextInput,
+  Modal,
 } from "react-native";
-import Icon from "react-native-vector-icons/MaterialIcons"; // Já existente
-import { MaterialCommunityIcons } from "@expo/vector-icons"; // Novo para o chapéu
-import { Audio } from "expo-av"; // Adicionado para o som
+import Icon from "react-native-vector-icons/MaterialIcons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { Audio } from "expo-av";
 import Mesa from "../components/Mesa";
 import AdicionarMesaModal from "../components/AdicionarMesaModal";
 import DetalhesMesaModal from "../components/DetalhesMesaModal";
@@ -46,11 +47,14 @@ export default function HomeScreen() {
   const [mesaSelecionada, setMesaSelecionada] = useState(null);
   const [mesaDetalhes, setMesaDetalhes] = useState(null);
   const [drawer, setDrawer] = useState(null);
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [password, setPassword] = useState("");
+  const [actionToPerform, setActionToPerform] = useState(null); // Armazena a ação a ser executada após a senha
 
   useEffect(() => {
     let unsubscribeMesas, unsubscribePedidos, unsubscribeEstoque;
-    let previousPedidosCount = 0; // Para rastrear o número anterior de pedidos
-    let soundObject = null; // Para armazenar o som
+    let previousPedidosCount = 0;
+    let soundObject = null;
 
     const initializeFirebaseAndListeners = async () => {
       try {
@@ -68,14 +72,13 @@ export default function HomeScreen() {
           console.log("(NOBRIDGE) LOG Pedidos recebidos no HomeScreen:", data);
           const currentPedidosCount = data.length;
 
-          // Toca o som apenas se o número de pedidos aumentar (não na inicialização)
           if (
             currentPedidosCount > previousPedidosCount &&
             previousPedidosCount !== 0
           ) {
             try {
               const { sound } = await Audio.Sound.createAsync(
-                require("../../assets/notification.mp3") // Caminho do arquivo de som
+                require("../../assets/notification.mp3")
               );
               soundObject = sound;
               await sound.playAsync();
@@ -89,7 +92,7 @@ export default function HomeScreen() {
               );
             }
           }
-          previousPedidosCount = currentPedidosCount; // Atualiza a contagem
+          previousPedidosCount = currentPedidosCount;
           setPedidos(data);
         });
 
@@ -125,7 +128,7 @@ export default function HomeScreen() {
       if (unsubscribePedidos) unsubscribePedidos();
       if (unsubscribeEstoque) unsubscribeEstoque();
       if (soundObject) {
-        soundObject.unloadAsync(); // Libera o som da memória
+        soundObject.unloadAsync();
       }
     };
   }, []);
@@ -135,10 +138,7 @@ export default function HomeScreen() {
       (mesa) => mesa.numero === numeroMesa
     );
     if (mesaNumeroExistente) {
-      Alert.alert(
-        "Erro",
-        `Já existe uma mesa com o número "${numeroMesa}". Escolha um número diferente.`
-      );
+      Alert.alert("Erro", `Já existe uma mesa com o número "${numeroMesa}".`);
       return;
     }
 
@@ -146,10 +146,7 @@ export default function HomeScreen() {
       (mesa) => mesa.nomeCliente === nomeCliente
     );
     if (mesaNomeExistente) {
-      Alert.alert(
-        "Erro",
-        `Já existe uma mesa com o cliente "${nomeCliente}". Escolha um nome diferente.`
-      );
+      Alert.alert("Erro", `Já existe uma mesa com o cliente "${nomeCliente}".`);
       return;
     }
 
@@ -196,8 +193,6 @@ export default function HomeScreen() {
         );
         Alert.alert("Erro", "Não foi possível mover a mesa: " + error.message);
       }
-    } else {
-      console.error("(NOBRIDGE) ERROR Mesa não encontrada para mover:", mesaId);
     }
   };
 
@@ -300,12 +295,6 @@ export default function HomeScreen() {
         if (p.mesaOriginal) updates[`pedidos/${p.id}/mesaOriginal`] = null;
       });
 
-      console.log("(NOBRIDGE) LOG Separando mesas:", {
-        mesaId,
-        pedidosMesa1,
-        pedidosMesa2,
-      });
-
       await Promise.all([
         freshDb.ref(`mesas/${mesaId}`).remove(),
         adicionarMesaNoFirebase(novaMesa1),
@@ -314,10 +303,6 @@ export default function HomeScreen() {
 
       await freshDb.ref().update(updates);
 
-      console.log("(NOBRIDGE) LOG Mesas separadas com sucesso:", {
-        numero1,
-        numero2,
-      });
       setMesaSelecionada(null);
     } catch (error) {
       console.error("(NOBRIDGE) ERROR Erro ao separar mesas:", error);
@@ -335,20 +320,15 @@ export default function HomeScreen() {
 
   const handleAdicionarPedido = async (mesaNumero, itens) => {
     try {
-      console.log("Iniciando adição de pedido no HomeScreen:", {
-        mesaNumero,
-        itens,
-      });
       await adicionarPedido(mesaNumero, itens);
-      console.log("Pedido adicionado com sucesso no HomeScreen");
     } catch (error) {
-      console.error("Erro ao adicionar pedido no HomeScreen:", error);
       Alert.alert(
         "Erro",
-        error.message || "Não foi possível adicionar o pedido."
+        "Não foi possível adicionar o pedido: " + error.message
       );
     }
   };
+
   async function registerForPushNotificationsAsync() {
     let token;
     if (Platform.OS === "android") {
@@ -357,7 +337,7 @@ export default function HomeScreen() {
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: "#FF231F7C",
-        sound: "default", // Usa o som padrão do sistema; pode ser personalizado
+        sound: "default",
       });
     }
 
@@ -379,7 +359,6 @@ export default function HomeScreen() {
   }
 
   const handleAtualizarMesa = (novaMesa) => {
-    console.log("(NOBRIDGE) LOG Atualizando mesa no HomeScreen:", novaMesa);
     setMesas((prevMesas) =>
       prevMesas.map((m) => (m.id === novaMesa.id ? novaMesa : m))
     );
@@ -413,7 +392,6 @@ export default function HomeScreen() {
     }
 
     try {
-      console.log("(NOBRIDGE) LOG Tentando remover mesa:", mesaId);
       await removerPedidosDaMesa(mesa.numero);
       await removerMesa(mesaId);
       setMesas((prevMesas) => prevMesas.filter((m) => m.id !== mesaId));
@@ -422,11 +400,27 @@ export default function HomeScreen() {
         setDetalhesVisible(false);
       }
       setMesaSelecionada(null);
-      console.log("(NOBRIDGE) LOG Mesa removida localmente:", mesaId);
       Alert.alert("Sucesso", "Mesa removida com sucesso!");
     } catch (error) {
-      console.error("(NOBRIDGE) ERROR Erro ao chamar removerMesa:", error);
       Alert.alert("Erro", "Não foi possível remover a mesa: " + error.message);
+    }
+  };
+
+  const checkPassword = (action) => {
+    setActionToPerform(() => action); // Armazena a ação a ser executada
+    setPasswordModalVisible(true); // Abre o modal
+  };
+
+  const handlePasswordSubmit = () => {
+    if (password === "1249") {
+      setPasswordModalVisible(false);
+      setPassword("");
+      if (actionToPerform) {
+        actionToPerform(); // Executa a ação armazenada
+      }
+    } else {
+      Alert.alert("Erro", "Senha incorreta!");
+      setPassword("");
     }
   };
 
@@ -446,30 +440,36 @@ export default function HomeScreen() {
       <View style={{ marginVertical: 10 }}>
         <Button
           title="Controle de Estoque"
-          onPress={() => {
-            setEstoqueVisible(true);
-            drawer.closeDrawer();
-          }}
+          onPress={() =>
+            checkPassword(() => {
+              setEstoqueVisible(true);
+              drawer.closeDrawer();
+            })
+          }
           color="#FFA500"
         />
       </View>
       <View style={{ marginVertical: 10 }}>
         <Button
           title="Gerenciar Estoque/Cardápio"
-          onPress={() => {
-            setGerenciarVisible(true);
-            drawer.closeDrawer();
-          }}
+          onPress={() =>
+            checkPassword(() => {
+              setGerenciarVisible(true);
+              drawer.closeDrawer();
+            })
+          }
           color="#FFA500"
         />
       </View>
       <View style={{ marginVertical: 10 }}>
         <Button
           title="Gerenciar Fichas Técnicas"
-          onPress={() => {
-            setFichasTecnicasVisible(true);
-            drawer.closeDrawer();
-          }}
+          onPress={() =>
+            checkPassword(() => {
+              setFichasTecnicasVisible(true);
+              drawer.closeDrawer();
+            })
+          }
           color="#FFA500"
         />
       </View>
@@ -557,6 +557,42 @@ export default function HomeScreen() {
           visible={fichasTecnicasVisible}
           onClose={() => setFichasTecnicasVisible(false)}
         />
+        <Modal
+          visible={passwordModalVisible}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setPasswordModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.passwordModal}>
+              <Text style={styles.modalTitle}>Digite a Senha</Text>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Senha"
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+                placeholderTextColor="#888"
+              />
+              <View style={styles.modalButtons}>
+                <Button
+                  title="Confirmar"
+                  onPress={handlePasswordSubmit}
+                  color="#FFA500"
+                />
+                <Button
+                  title="Cancelar"
+                  onPress={() => {
+                    setPasswordModalVisible(false);
+                    setPassword("");
+                    setActionToPerform(null);
+                  }}
+                  color="#FF4444"
+                />
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </DrawerLayoutAndroid>
   );
@@ -614,5 +650,39 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     color: "#fff",
     backgroundColor: "rgba(255, 255, 255, 0.2)",
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  passwordModal: {
+    width: "80%",
+    padding: 20,
+    backgroundColor: "#FFF",
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 15,
+    color: "#5C4329",
+  },
+  passwordInput: {
+    width: "100%",
+    height: 40,
+    borderColor: "#5C4329",
+    borderWidth: 1,
+    borderRadius: 5,
+    paddingHorizontal: 10,
+    marginBottom: 20,
+    color: "#000",
+  },
+  modalButtons: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    width: "100%",
   },
 });
