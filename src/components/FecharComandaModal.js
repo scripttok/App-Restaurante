@@ -29,6 +29,7 @@ export default function FecharComandaModal({
   const [valorRecebido, setValorRecebido] = useState("");
   const [divisao, setDivisao] = useState("1");
   const [telefoneCliente, setTelefoneCliente] = useState("");
+  const [desconto, setDesconto] = useState(""); // Novo estado para o desconto
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -48,7 +49,7 @@ export default function FecharComandaModal({
       .toFixed(2);
   };
 
-  const calcularTotalGeral = () => {
+  const calcularTotalSemDesconto = () => {
     if (!pedidos || pedidos.length === 0) return "0.00";
     return pedidos
       .reduce((total, pedido) => {
@@ -57,17 +58,23 @@ export default function FecharComandaModal({
       .toFixed(2);
   };
 
+  const calcularTotalComDesconto = () => {
+    const totalSemDesconto = parseFloat(calcularTotalSemDesconto());
+    const descontoNum = parseFloat(desconto) || 0;
+    return Math.max(0, totalSemDesconto - descontoNum).toFixed(2);
+  };
+
   const calcularRestante = () => {
-    const total = parseFloat(calcularTotalGeral());
+    const totalComDesconto = parseFloat(calcularTotalComDesconto());
     const pagoAnterior = mesa?.valorPago || 0;
     const pagoNovo = parseFloat(valorPago) || 0;
-    return Math.max(0, total - (pagoAnterior + pagoNovo)).toFixed(2);
+    return Math.max(0, totalComDesconto - (pagoAnterior + pagoNovo)).toFixed(2);
   };
 
   const calcularDivisao = () => {
-    const total = parseFloat(calcularTotalGeral());
+    const totalComDesconto = parseFloat(calcularTotalComDesconto());
     const numDivisao = parseInt(divisao) || 1;
-    return (total / numDivisao).toFixed(2);
+    return (totalComDesconto / numDivisao).toFixed(2);
   };
 
   const calcularTroco = () => {
@@ -83,11 +90,11 @@ export default function FecharComandaModal({
   };
 
   const isPagamentoParcial = () => {
-    const total = parseFloat(calcularTotalGeral());
+    const totalComDesconto = parseFloat(calcularTotalComDesconto());
     const pagoAnterior = mesa?.valorPago || 0;
     const pagoNovo = parseFloat(valorPago) || 0;
     const pagoTotal = pagoAnterior + pagoNovo;
-    return pagoTotal > 0 && pagoTotal < total;
+    return pagoTotal > 0 && pagoTotal < totalComDesconto;
   };
 
   const getResumoConta = () => {
@@ -112,7 +119,9 @@ export default function FecharComandaModal({
       numero: mesa?.numero || "N/A",
       nomeCliente: mesa?.nomeCliente || "N/A",
       itens,
-      total: calcularTotalGeral(),
+      totalSemDesconto: calcularTotalSemDesconto(),
+      desconto: parseFloat(desconto) || 0,
+      total: calcularTotalComDesconto(),
       pago: (mesa?.valorPago || 0) + (parseFloat(valorPago) || 0),
       restante: calcularRestante(),
     };
@@ -120,6 +129,15 @@ export default function FecharComandaModal({
 
   const handleFecharComanda = async () => {
     if (!mesa || isSubmitting) return;
+    const totalSemDesconto = parseFloat(calcularTotalSemDesconto());
+    const descontoNum = parseFloat(desconto) || 0;
+    if (descontoNum > totalSemDesconto) {
+      Alert.alert(
+        "Erro",
+        "O desconto não pode ser maior que o total sem desconto."
+      );
+      return;
+    }
     if (!isPagamentoSuficiente()) {
       Alert.alert(
         "Erro",
@@ -129,7 +147,7 @@ export default function FecharComandaModal({
     }
     setIsSubmitting(true);
     try {
-      const totalGeral = parseFloat(calcularTotalGeral());
+      const totalComDesconto = parseFloat(calcularTotalComDesconto());
       const pagoAnterior = mesa?.valorPago || 0;
       const pagoNovo = parseFloat(valorPago) || 0;
       const recebido = parseFloat(valorRecebido) || 0;
@@ -138,7 +156,9 @@ export default function FecharComandaModal({
 
       console.log("Fechando comanda:", {
         mesaId: mesa.id,
-        totalGeral,
+        totalSemDesconto,
+        desconto: descontoNum,
+        totalComDesconto,
         pagoAnterior,
         pagoNovo,
         pagoTotal,
@@ -152,6 +172,7 @@ export default function FecharComandaModal({
         valorRestante: 0,
         valorRecebido: recebido,
         troco,
+        desconto: descontoNum, // Inclui o desconto nos dados salvos
         status: "fechada",
       });
       console.log("Atualizando mesa após fechamento total");
@@ -161,6 +182,7 @@ export default function FecharComandaModal({
         valorRestante: 0,
         valorRecebido: recebido,
         troco,
+        desconto: descontoNum,
         status: "fechada",
       });
       Alert.alert("Sucesso", "Comanda fechada com sucesso!");
@@ -174,12 +196,22 @@ export default function FecharComandaModal({
       console.error("Erro ao fechar comanda:", error);
     } finally {
       setIsSubmitting(false);
+      setDesconto(""); // Limpa o campo de desconto
     }
   };
 
   const handleRecebidoParcial = async () => {
     if (!mesa || isSubmitting) return;
     const pagoNovo = parseFloat(valorPago) || 0;
+    const descontoNum = parseFloat(desconto) || 0;
+    const totalSemDesconto = parseFloat(calcularTotalSemDesconto());
+    if (descontoNum > totalSemDesconto) {
+      Alert.alert(
+        "Erro",
+        "O desconto não pode ser maior que o total sem desconto."
+      );
+      return;
+    }
     if (pagoNovo <= 0) {
       Alert.alert(
         "Erro",
@@ -189,11 +221,11 @@ export default function FecharComandaModal({
     }
     setIsSubmitting(true);
     try {
-      const totalGeral = parseFloat(calcularTotalGeral());
+      const totalComDesconto = parseFloat(calcularTotalComDesconto());
       const pagoAnterior = mesa?.valorPago || 0;
       const recebido = parseFloat(valorRecebido) || 0;
       const pagoTotal = pagoAnterior + pagoNovo;
-      const restante = Math.max(0, totalGeral - pagoTotal).toFixed(2);
+      const restante = Math.max(0, totalComDesconto - pagoTotal).toFixed(2);
       const troco =
         recebido > pagoNovo ? (recebido - pagoNovo).toFixed(2) : "0.00";
 
@@ -202,6 +234,7 @@ export default function FecharComandaModal({
         valorRestante: restante,
         valorRecebido: recebido,
         troco,
+        desconto: descontoNum, // Inclui o desconto nos dados salvos
         status: "aberta",
       };
 
@@ -230,6 +263,7 @@ export default function FecharComandaModal({
       );
       setValorPago("");
       setValorRecebido("");
+      setDesconto(""); // Limpa o campo de desconto
     } catch (error) {
       Alert.alert(
         "Erro",
@@ -244,6 +278,15 @@ export default function FecharComandaModal({
   const handleEnviarWhatsApp = async () => {
     if (!mesa || pedidos.length === 0 || isSubmitting) {
       Alert.alert("Erro", "Nenhum pedido para enviar.");
+      return;
+    }
+    const totalSemDesconto = parseFloat(calcularTotalSemDesconto());
+    const descontoNum = parseFloat(desconto) || 0;
+    if (descontoNum > totalSemDesconto) {
+      Alert.alert(
+        "Erro",
+        "O desconto não pode ser maior que o total sem desconto."
+      );
       return;
     }
     if (!isPagamentoSuficiente()) {
@@ -286,9 +329,9 @@ export default function FecharComandaModal({
       if (supported) {
         await Linking.openURL(whatsappUrl);
 
-        const totalGeral = parseFloat(calcularTotalGeral());
+        const totalComDesconto = parseFloat(calcularTotalComDesconto());
         const pagoAnterior = parseFloat(mesa?.valorPago || 0);
-        const pagoNovo = parseFloat(valorPago) || totalGeral;
+        const pagoNovo = parseFloat(valorPago) || totalComDesconto;
         const recebido = parseFloat(valorRecebido) || 0;
         const troco = calcularTroco();
         const pagoTotal = pagoAnterior + pagoNovo;
@@ -298,6 +341,7 @@ export default function FecharComandaModal({
           valorRestante: 0,
           valorRecebido: recebido,
           troco,
+          desconto: descontoNum, // Inclui o desconto nos dados salvos
           status: "fechada",
         };
 
@@ -324,6 +368,7 @@ export default function FecharComandaModal({
       console.error("Erro ao enviar via WhatsApp:", error);
     } finally {
       setIsSubmitting(false);
+      setDesconto(""); // Limpa o campo de desconto
     }
   };
 
@@ -349,7 +394,19 @@ export default function FecharComandaModal({
               Fechar Comanda - Mesa {mesa?.numero}
             </Text>
             <Text style={styles.totalGeral}>
-              Total Geral: R$ {calcularTotalGeral()}
+              Total R$ {calcularTotalSemDesconto()}
+            </Text>
+            <Text style={styles.label}>Desconto:</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Digite o desconto (ex.: 10.00)"
+              keyboardType="numeric"
+              value={desconto}
+              onChangeText={(text) => setDesconto(text.replace(/[^0-9.]/g, ""))}
+              placeholderTextColor="#888"
+            />
+            <Text style={styles.totalGeral}>
+              Total com desconto: R$ {calcularTotalComDesconto()}
             </Text>
             <Text style={styles.label}>Dividir em quantas partes?</Text>
             <TextInput
@@ -363,7 +420,7 @@ export default function FecharComandaModal({
             <Text style={styles.divisao}>
               Valor por parte: R$ {calcularDivisao()}
             </Text>
-            <Text style={styles.label}>Valor Pago:</Text>
+            <Text style={styles.label}>Pagar parcial:</Text>
             <TextInput
               style={styles.input}
               placeholder="Digite o valor pago (ex.: 15.00)"
@@ -385,9 +442,7 @@ export default function FecharComandaModal({
               }
               placeholderTextColor="#888"
             />
-            <Text style={styles.restante}>
-              Restante a Pagar: R$ {calcularRestante()}
-            </Text>
+
             {!isPagamentoSuficiente() && isPagamentoParcial() && (
               <Text style={styles.saldoDevedor}>
                 Saldo Devedor: R$ {calcularRestante()}
@@ -440,8 +495,6 @@ export default function FecharComandaModal({
   );
 }
 
-// 5C4329 marrom
-
 const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
@@ -480,7 +533,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 16,
-    color: "black",
+    color: "#999",
     marginBottom: 8,
     fontWeight: "600",
   },
@@ -491,8 +544,8 @@ const styles = StyleSheet.create({
     padding: 12,
     marginVertical: 10,
     fontSize: 16,
-    color: "#000000",
-    backgroundColor: "#FFFFFF",
+    color: "#FFFFFF",
+    backgroundColor: "#FFFFFF00",
     textAlign: "left",
   },
   divisao: {
