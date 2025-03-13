@@ -237,7 +237,7 @@ export default function ControleEstoqueModal({ visible, onClose }) {
           color="#28a745"
         />
         <Button
-          title="Remover"
+          title="Diminuir"
           onPress={() =>
             handleRemoverEstoque(
               item.id,
@@ -246,10 +246,10 @@ export default function ControleEstoqueModal({ visible, onClose }) {
               item.categoria
             )
           }
-          color="#ff4444"
+          color="#FFA500"
         />
         <Button
-          title="Remover Tudo"
+          title="Remover"
           onPress={() =>
             handleRemoverItemCompleto(item.id, item.nome, item.categoria)
           }
@@ -259,9 +259,18 @@ export default function ControleEstoqueModal({ visible, onClose }) {
     </View>
   );
 
-  const filteredEstoque = estoque.filter((item) =>
-    item.nome.toLowerCase().includes(searchText.toLowerCase())
-  );
+  const filteredEstoque = estoque.filter((item) => {
+    // Normaliza o nome do item e o texto de busca
+    const nomeNormalizado = removerAcentos(item.nome.toLowerCase());
+    const searchTextNormalizado = removerAcentos(searchText.toLowerCase());
+
+    // Verifica se o nome normalizado inclui o texto de busca normalizado
+    return nomeNormalizado.includes(searchTextNormalizado);
+  });
+
+  function removerAcentos(texto) {
+    return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
 
   return (
     <Modal visible={visible} transparent animationType="slide">
@@ -270,7 +279,7 @@ export default function ControleEstoqueModal({ visible, onClose }) {
           <Text style={styles.titulo}>Controle de Estoque</Text>
           <TextInput
             style={styles.searchInput}
-            placeholder="Buscar por nome do item"
+            placeholder="Buscar item"
             placeholderTextColor="#aaa"
             value={searchText}
             onChangeText={setSearchText}
