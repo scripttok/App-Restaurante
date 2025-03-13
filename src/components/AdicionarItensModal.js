@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   TextInput,
   Image,
+  Alert,
 } from "react-native";
 import { getCardapio } from "../services/mesaService";
 
@@ -30,7 +31,10 @@ export default function AdicionarItensModal({
     let unsubscribe;
     if (visible) {
       unsubscribe = getCardapio((data) => {
-        console.log("Itens recebidos em AdicionarItensModal:", data);
+        console.log(
+          "(NOBRIDGE) LOG Itens recebidos em AdicionarItensModal:",
+          data
+        );
         setItensDisponiveis(data || []);
       });
     }
@@ -39,13 +43,41 @@ export default function AdicionarItensModal({
     };
   }, [visible]);
 
-  const toggleItem = (nome) => {
+  const toggleItem = (item) => {
+    console.log(
+      "(NOBRIDGE) LOG toggleItem - Tentativa de toggle para item:",
+      item
+    );
     setItensSelecionados((prev) => {
-      const existente = prev.find((item) => item.nome === nome);
+      const existente = prev.find((i) => i.nome === item.nome);
+      console.log("(NOBRIDGE) LOG toggleItem - Itens atuais:", prev);
+
       if (existente) {
-        return prev.filter((item) => item.nome !== nome);
+        const novosItens = prev.filter((i) => i.nome !== item.nome);
+        console.log(
+          "(NOBRIDGE) LOG toggleItem - Removendo item, novos itens:",
+          novosItens
+        );
+        return novosItens;
       }
-      return [...prev, { nome, quantidade: 1, observacao: "" }];
+
+      if (!item || !item.nome) {
+        console.error("(NOBRIDGE) ERROR toggleItem - Item inválido:", item);
+        return prev;
+      }
+
+      const novoItem = {
+        nome: item.nome,
+        quantidade: 1,
+        observacao: "",
+      };
+
+      console.log(
+        "(NOBRIDGE) LOG toggleItem - Novo item adicionado:",
+        novoItem
+      );
+      const novosItens = [...prev, novoItem];
+      return novosItens;
     });
   };
 
@@ -66,23 +98,37 @@ export default function AdicionarItensModal({
   };
 
   const handleConfirmar = () => {
-    if (
-      itensSelecionados.length === 0 ||
-      itensSelecionados.every((item) => item.quantidade <= 0)
-    ) {
-      alert("Selecione pelo menos um item com quantidade válida.");
-      return;
-    }
-    console.log("Itens confirmados:", itensSelecionados);
-    onConfirm(itensSelecionados);
-    setItensSelecionados([]);
-    onClose();
-  };
+    console.log(
+      "(NOBRIDGE) LOG handleConfirmar - Itens selecionados antes de filtrar:",
+      itensSelecionados
+    );
+    const itensValidos = itensSelecionados.filter(
+      (item) => item && item.nome && typeof item.nome === "string"
+    );
 
-  const handleAdicionarItensCategoria = () => {
-    // Fecha o modal secundário sem limpar itensSelecionados
-    setModalCategoriaVisivel(false);
-    setCategoriaSelecionada(null);
+    console.log(
+      "(NOBRIDGE) LOG handleConfirmar - Itens válidos após filtrar:",
+      itensValidos
+    );
+
+    if (itensValidos.length > 0) {
+      console.log(
+        "(NOBRIDGE) LOG handleConfirmar - Chamando onConfirm com itens:",
+        itensValidos
+      );
+      onConfirm(itensValidos);
+      onClose();
+    } else {
+      console.warn(
+        "(NOBRIDGE) WARN handleConfirmar - Nenhum item válido para adicionar"
+      );
+      Alert.alert(
+        "Atenção",
+        "Selecione pelo menos um item válido antes de confirmar."
+      );
+    }
+
+    setItensSelecionados([]);
   };
 
   const abrirModalCategoria = (categoria) => {
@@ -120,7 +166,7 @@ export default function AdicionarItensModal({
       <View style={styles.item}>
         <TouchableOpacity
           style={[styles.itemCheck, selecionado && styles.itemSelecionado]}
-          onPress={() => toggleItem(item.nome)}
+          onPress={() => toggleItem(item)}
         >
           <View style={styles.itemContent}>
             {item.imagens && item.imagens.length > 0 && (
@@ -168,6 +214,18 @@ export default function AdicionarItensModal({
     ? itensDisponiveis.filter((item) => item.categoria === categoriaSelecionada)
     : [];
 
+  if (!itensDisponiveis.length && visible) {
+    return (
+      <Modal visible={visible} transparent animationType="slide">
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.titulo}>Carregando cardápio...</Text>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
   return (
     <>
       <Modal visible={visible} transparent animationType="slide">
@@ -179,7 +237,7 @@ export default function AdicionarItensModal({
             <FlatList
               data={categorias}
               renderItem={renderCategoria}
-              keyExtractor={(item) => item} // Chave única baseada na categoria
+              keyExtractor={(item) => `cat-${item}`} // Chave única para categorias
               style={styles.flatList}
               contentContainerStyle={styles.flatListContent}
               ListEmptyComponent={
@@ -211,7 +269,9 @@ export default function AdicionarItensModal({
             <FlatList
               data={itensDaCategoria}
               renderItem={renderItem}
-              keyExtractor={(item) => item.nome} // Chave única baseada no nome do item
+              keyExtractor={(item, index) =>
+                `${item.categoria}-${item.nome}-${index}`
+              } // Chave única para itens
               style={styles.flatList}
               contentContainerStyle={styles.flatListContent}
               ListEmptyComponent={
@@ -221,7 +281,7 @@ export default function AdicionarItensModal({
             <View style={styles.botoes}>
               <CustomButton
                 title="Adicionar"
-                onPress={handleAdicionarItensCategoria}
+                onPress={fecharModalCategoria}
                 color="#28A745"
               />
               <CustomButton

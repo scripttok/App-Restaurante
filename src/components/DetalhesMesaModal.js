@@ -44,6 +44,26 @@ export default function DetalhesMesaModal({
     }
   };
 
+  const handleRemoverItem = async (pedidoId) => {
+    try {
+      const freshDb = await ensureFirebaseInitialized();
+      const pedidoRef = freshDb.ref(`pedidos/${pedidoId}`);
+
+      await pedidoRef.remove();
+      console.log("(NOBRIDGE) LOG Pedido removido do Firebase:", pedidoId);
+
+      const novosPedidos = pedidosLocais.filter(
+        (pedido) => pedido.id !== pedidoId
+      );
+      setPedidosLocais(novosPedidos);
+
+      Alert.alert("Sucesso", "Item removido com sucesso!");
+    } catch (error) {
+      console.error("(NOBRIDGE) ERROR Erro ao remover pedido:", error);
+      Alert.alert("Erro", "Não foi possível remover o item: " + error.message);
+    }
+  };
+
   useEffect(() => {
     console.log("(NOBRIDGE) LOG Mesa recebida como prop:", mesa);
     setMesaAtual(mesa || {});
@@ -51,7 +71,7 @@ export default function DetalhesMesaModal({
 
     let unsubscribe;
     if (visible) {
-      fetchMesaAtual(); // Busca os dados mais recentes ao abrir o modal
+      fetchMesaAtual();
       unsubscribe = getCardapio((data) => {
         console.log(
           "(NOBRIDGE) LOG Cardápio recebido no DetalhesMesaModal:",
@@ -71,10 +91,36 @@ export default function DetalhesMesaModal({
   }, [visible, mesa, pedidos]);
 
   const handleStatusToggle = async (pedidoId, entregueAtual) => {
+    if (entregueAtual) return; // Já entregue, não faz nada
+
+    console.log("(NOBRIDGE) LOG Iniciando atualização de status para pedido:", {
+      pedidoId,
+      novoStatus: !entregueAtual,
+    });
+
     try {
       await atualizarStatusPedido(pedidoId, !entregueAtual);
+      console.log("(NOBRIDGE) LOG Status atualizado com sucesso para:", {
+        pedidoId,
+        status: !entregueAtual,
+      });
+
+      // Atualizar pedidos locais após a mudança
+      const novosPedidos = pedidosLocais.map((pedido) =>
+        pedido.id === pedidoId
+          ? { ...pedido, entregue: !entregueAtual }
+          : pedido
+      );
+      setPedidosLocais(novosPedidos);
     } catch (error) {
-      Alert.alert("Erro", "Não foi possível atualizar o status do pedido.");
+      console.error("(NOBRIDGE) ERROR Erro ao atualizar status do pedido:", {
+        message: error.message,
+        stack: error.stack,
+      });
+      Alert.alert(
+        "Erro",
+        "Não foi possível atualizar o status do pedido: " + error.message
+      );
     }
   };
 
@@ -106,7 +152,7 @@ export default function DetalhesMesaModal({
       novaMesa
     );
     setMesaAtual(novaMesa);
-    fetchMesaAtual(); // Busca os dados mais recentes após atualização
+    fetchMesaAtual();
   };
 
   const renderItem = ({ item }) => (
@@ -126,12 +172,21 @@ export default function DetalhesMesaModal({
           Total: R$ {calcularTotalPedido(item.itens)}
         </Text>
       </View>
-      <CustomButton
-        title={item.entregue ? "Entregue" : "Entregar"}
-        onPress={() => !item.entregue && handleStatusToggle(item.id)}
-        color={item.entregue ? "#ff4444" : "#4CAF50"}
-        disabled={item.entregue}
-      />
+      <View style={styles.itemButtons}>
+        <CustomButton
+          title={item.entregue ? "Entregue" : "Entregar"}
+          onPress={() => !item.entregue && handleStatusToggle(item.id)}
+          color={item.entregue ? "#ff4444" : "#4CAF50"}
+          disabled={item.entregue}
+        />
+        {!item.entregue && (
+          <CustomButton
+            title="X"
+            onPress={() => handleRemoverItem(item.id)}
+            color="#ff4444"
+          />
+        )}
+      </View>
     </View>
   );
 
@@ -221,29 +276,27 @@ const CustomButton = ({ title, onPress, color, disabled }) => (
   </TouchableOpacity>
 );
 
-// backgroundColor: "#5C4329"
-
 const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.6)", // Escurecido para mais contraste
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
   },
   modalContent: {
-    width: "90%", // Maior largura para respirar
+    width: "90%",
     maxWidth: 400,
     padding: 20,
     backgroundColor: "#fff",
-    borderRadius: 12, // Bordas mais suaves
+    borderRadius: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
-    elevation: 5, // Sombra no Android
+    elevation: 5,
   },
   titulo: {
-    fontSize: 24, // Aumentada para destaque
+    fontSize: 24,
     fontWeight: "bold",
     color: "#333",
     textAlign: "center",
@@ -251,7 +304,7 @@ const styles = StyleSheet.create({
   },
   flatList: {
     flexGrow: 0,
-    maxHeight: 350, // Aumentado para mais visibilidade
+    maxHeight: 350,
     marginVertical: 10,
   },
   flatListContent: {
@@ -263,7 +316,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 15,
     marginVertical: 5,
-    backgroundColor: "#f9f9f9", // Fundo claro para destaque
+    backgroundColor: "#f9f9f9",
     borderRadius: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -285,23 +338,28 @@ const styles = StyleSheet.create({
     color: "#777",
     marginTop: 5,
   },
+  itemButtons: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+  },
   totalGeral: {
     fontSize: 20,
     fontWeight: "bold",
     textAlign: "center",
-    color: "#2196F3", // Azul para destaque
+    color: "#2196F3",
     marginVertical: 10,
   },
   valorPago: {
     fontSize: 16,
     textAlign: "center",
-    color: "#4CAF50", // Verde para valor pago
+    color: "#4CAF50",
     marginVertical: 5,
   },
   saldoDevedor: {
     fontSize: 16,
     textAlign: "center",
-    color: "#ff4444", // Vermelho para saldo devedor
+    color: "#ff4444",
     marginVertical: 5,
   },
   botoes: {
@@ -309,13 +367,13 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     justifyContent: "center",
     marginTop: 20,
-    gap: 15, // Mais espaçamento entre botões
+    gap: 15,
   },
   button: {
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 8,
-    backgroundColor: "#2196F3", // Cor padrão para botões
+    backgroundColor: "#2196F3",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,

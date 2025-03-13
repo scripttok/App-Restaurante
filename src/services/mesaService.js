@@ -304,24 +304,160 @@ export const getCardapio = (callback) => {
   };
 };
 
-export const atualizarStatusPedido = async (pedidoId, entregue) => {
-  const freshDb = await ensureFirebaseInitialized();
-  await waitForConnection(freshDb);
+const COMBOS_SUBITENS = {
+  "Combo Energético": [
+    { nome: "Água de coco", quantidade: 1 },
+    { nome: "RedBull", quantidade: 1 },
+    { nome: "Coca-Cola", quantidade: 1 },
+  ],
+  "Combo caipirinha": [
+    { nome: "Água de coco", quantidade: 1 },
+    { nome: "RedBull", quantidade: 1 },
+    { nome: "Coca-Cola", quantidade: 1 },
+  ],
+};
+
+export const atualizarStatusPedido = async (pedidoId, novoStatus) => {
+  const db = await ensureFirebaseInitialized();
   try {
     console.log("(NOBRIDGE) LOG Atualizando status do pedido:", {
       pedidoId,
-      entregue,
+      novoStatus,
     });
-    await freshDb.ref(`pedidos/${pedidoId}`).update({ entregue });
-    console.log(
-      "(NOBRIDGE) LOG Status do pedido atualizado com sucesso:",
-      pedidoId
-    );
+    await db.ref(`pedidos/${pedidoId}`).update({ entregue: novoStatus });
+
+    if (novoStatus === true) {
+      const pedidoSnapshot = await db.ref(`pedidos/${pedidoId}`).once("value");
+      const pedido = pedidoSnapshot.val();
+      console.log("(NOBRIDGE) LOG Dados do pedido recuperado:", pedido);
+      const itens = pedido?.itens || [];
+
+      if (!itens.length) {
+        console.warn(
+          "(NOBRIDGE) WARN Nenhum item encontrado no pedido:",
+          pedidoId
+        );
+        return;
+      }
+
+      for (const item of itens) {
+        console.log("(NOBRIDGE) LOG Processando item do pedido:", item);
+        const { nome, quantidade } = item;
+
+        // Verifica se o item é um combo (baseado no mapeamento fixo)
+        if (COMBOS_SUBITENS[nome]) {
+          console.log("(NOBRIDGE) LOG Identificado como combo:", nome);
+          const subItens = COMBOS_SUBITENS[nome];
+
+          for (const subItem of subItens) {
+            const { nome: subItemNome, quantidade: subItemQuantidade } =
+              subItem;
+            const quantidadeTotal = subItemQuantidade * (quantidade || 1);
+            console.log(
+              "(NOBRIDGE) LOG Baixando estoque para subitem do combo:",
+              {
+                nome: subItemNome,
+                quantidadeTotal,
+              }
+            );
+
+            const estoqueSnapshot = await db
+              .ref(`estoque/${subItemNome}`)
+              .once("value");
+            const estoqueData = estoqueSnapshot.val();
+
+            if (estoqueData) {
+              const quantidadeAtual = estoqueData.quantidade || 0;
+              const novaQuantidade = Math.max(
+                quantidadeAtual - quantidadeTotal,
+                0
+              );
+
+              if (novaQuantidade > 0) {
+                await db
+                  .ref(`estoque/${subItemNome}`)
+                  .update({ quantidade: novaQuantidade });
+                console.log("(NOBRIDGE) LOG Estoque atualizado:", {
+                  nome: subItemNome,
+                  novaQuantidade,
+                });
+              } else {
+                await db.ref(`estoque/${subItemNome}`).remove();
+                console.log(
+                  "(NOBRIDGE) LOG Item removido do estoque por zerar:",
+                  subItemNome
+                );
+                if (estoqueData.chaveCardapio && estoqueData.categoria) {
+                  await db
+                    .ref(
+                      `cardapio/${estoqueData.categoria}/${estoqueData.chaveCardapio}`
+                    )
+                    .remove();
+                  console.log(
+                    "(NOBRIDGE) LOG Item removido do cardápio:",
+                    subItemNome
+                  );
+                }
+              }
+            } else {
+              console.warn(
+                "(NOBRIDGE) WARN Item não encontrado no estoque:",
+                subItemNome
+              );
+            }
+          }
+        } else {
+          // Fluxo para itens não-combo
+          console.log("(NOBRIDGE) LOG Baixando estoque para item não-combo:", {
+            nome,
+            quantidade,
+          });
+
+          const estoqueSnapshot = await db.ref(`estoque/${nome}`).once("value");
+          const estoqueData = estoqueSnapshot.val();
+
+          if (estoqueData) {
+            const quantidadeAtual = estoqueData.quantidade || 0;
+            const novaQuantidade = Math.max(quantidadeAtual - quantidade, 0);
+
+            if (novaQuantidade > 0) {
+              await db
+                .ref(`estoque/${nome}`)
+                .update({ quantidade: novaQuantidade });
+              console.log("(NOBRIDGE) LOG Estoque atualizado:", {
+                nome,
+                novaQuantidade,
+              });
+            } else {
+              await db.ref(`estoque/${nome}`).remove();
+              console.log(
+                "(NOBRIDGE) LOG Item removido do estoque por zerar:",
+                nome
+              );
+              if (estoqueData.chaveCardapio && estoqueData.categoria) {
+                await db
+                  .ref(
+                    `cardapio/${estoqueData.categoria}/${estoqueData.chaveCardapio}`
+                  )
+                  .remove();
+                console.log("(NOBRIDGE) LOG Item removido do cardápio:", nome);
+              }
+            }
+          } else {
+            console.warn(
+              "(NOBRIDGE) WARN Item não encontrado no estoque:",
+              nome
+            );
+          }
+        }
+      }
+    }
+    console.log("(NOBRIDGE) LOG Status atualizado com sucesso para:", {
+      pedidoId,
+      status: novoStatus,
+    });
   } catch (error) {
-    console.error(
-      "(NOBRIDGE) ERROR Erro ao atualizar status do pedido:",
-      error
-    );
+    console.error("(NOBRIDGE) ERROR Erro ao atualizar status:", error);
     throw error;
   }
 };
@@ -407,48 +543,108 @@ export const removerEstoque = async (itemId, quantidade) => {
   }
 };
 
-// src/services/mesaService.js
-// src/services/mesaService.js
 export const adicionarNovoItemCardapio = async (
   nome,
   precoUnitario,
   imagemUrl,
-  categoria
+  categoria,
+  chaveUnica
 ) => {
-  const firebaseInstance = await ensureFirebaseInitialized();
-  await waitForConnection(firebaseInstance.database());
+  const db = await ensureFirebaseInitialized();
   try {
     console.log("(NOBRIDGE) LOG Iniciando adição ao cardápio:", {
       nome,
       precoUnitario,
       imagemUrl,
       categoria,
+      chaveUnica,
     });
+
     const itemData = {
       nome,
       precoUnitario: parseFloat(precoUnitario) || 0,
+      descrição: "Item adicionado via estoque",
+      imagens: imagemUrl ? [imagemUrl] : [],
     };
 
-    if (imagemUrl) {
-      itemData.imagens = [imagemUrl];
-      console.log("(NOBRIDGE) LOG URL da imagem adicionada:", imagemUrl);
-    }
-
-    // Salvar na categoria especificada
-    const ref = firebaseInstance
-      .database()
-      .ref(`cardapio/${categoria}/${nome}`);
-    await ref.set(itemData);
+    await db.ref(`cardapio/${categoria}/${chaveUnica}`).set(itemData);
     console.log(
       "(NOBRIDGE) LOG Item adicionado ao cardápio com sucesso:",
       itemData
     );
   } catch (error) {
-    console.error("(NOBRIDGE) ERROR Detalhes do erro:", {
+    console.error("(NOBRIDGE) ERROR Detalhes do erro no cardápio:", {
       message: error.message,
       code: error.code,
-      details: error.details,
-      serverResponse: error.serverResponse,
+    });
+    throw error;
+  }
+};
+
+export const removerItemEstoqueECardapio = async (nomeItem, categoria) => {
+  const db = await ensureFirebaseInitialized();
+  try {
+    const snapshot = await db
+      .ref(`estoque/${nomeItem}/chaveCardapio`)
+      .once("value");
+    const chaveCardapio = snapshot.val();
+
+    if (chaveCardapio) {
+      await db.ref(`cardapio/${categoria}/${chaveCardapio}`).remove();
+      console.log(`(NOBRIDGE) LOG Item ${nomeItem} removido do cardápio`);
+    } else {
+      console.log(
+        `(NOBRIDGE) LOG Nenhuma entrada no cardápio encontrada para ${nomeItem}`
+      );
+    }
+
+    await db.ref(`estoque/${nomeItem}`).remove();
+    console.log(`(NOBRIDGE) LOG Item ${nomeItem} removido do estoque`);
+  } catch (error) {
+    console.error("(NOBRIDGE) ERROR Erro ao remover item:", {
+      message: error.message,
+      code: error.code,
+    });
+    throw error;
+  }
+};
+
+export const atualizarQuantidadeEstoque = async (
+  nomeItem,
+  novaQuantidade,
+  categoria
+) => {
+  const db = await ensureFirebaseInitialized();
+  try {
+    await db
+      .ref(`estoque/${nomeItem}/quantidade`)
+      .set(parseInt(novaQuantidade, 10));
+    console.log(
+      `(NOBRIDGE) LOG Quantidade de ${nomeItem} atualizada para ${novaQuantidade}`
+    );
+
+    if (parseInt(novaQuantidade, 10) <= 0) {
+      const snapshot = await db
+        .ref(`estoque/${nomeItem}/chaveCardapio`)
+        .once("value");
+      const chaveCardapio = snapshot.val();
+
+      if (chaveCardapio) {
+        await db.ref(`cardapio/${categoria}/${chaveCardapio}`).remove();
+        console.log(
+          `(NOBRIDGE) LOG Item ${nomeItem} removido do cardápio por quantidade zero`
+        );
+      }
+
+      await db.ref(`estoque/${nomeItem}`).remove();
+      console.log(
+        `(NOBRIDGE) LOG Item ${nomeItem} removido do estoque por quantidade zero`
+      );
+    }
+  } catch (error) {
+    console.error("(NOBRIDGE) ERROR Erro ao atualizar quantidade:", {
+      message: error.message,
+      code: error.code,
     });
     throw error;
   }
