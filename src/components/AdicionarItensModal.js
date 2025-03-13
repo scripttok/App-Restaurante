@@ -68,7 +68,7 @@ export default function AdicionarItensModal({
 
       const novoItem = {
         nome: item.nome,
-        quantidade: 1,
+        quantidade: "",
         observacao: "",
       };
 
@@ -82,12 +82,12 @@ export default function AdicionarItensModal({
   };
 
   const atualizarQuantidade = (nome, quantidade) => {
-    const parsedQuantidade = parseInt(quantidade) || 0;
+    const parsedQuantidade = quantidade === "" ? "" : parseInt(quantidade) || 0;
     setItensSelecionados((prev) => {
       const updated = prev.map((item) =>
         item.nome === nome ? { ...item, quantidade: parsedQuantidade } : item
       );
-      return updated.filter((item) => item.quantidade > 0);
+      return updated;
     });
   };
 
@@ -103,7 +103,11 @@ export default function AdicionarItensModal({
       itensSelecionados
     );
     const itensValidos = itensSelecionados.filter(
-      (item) => item && item.nome && typeof item.nome === "string"
+      (item) =>
+        item &&
+        item.nome &&
+        typeof item.nome === "string" &&
+        item.quantidade > 0
     );
 
     console.log(
