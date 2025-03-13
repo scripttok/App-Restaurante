@@ -15,6 +15,8 @@ import {
   enviarComandaViaWhatsApp,
   removerPedidosDaMesa,
 } from "../services/mesaService";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 
 export default function FecharComandaModal({
   visible,
@@ -127,6 +129,79 @@ export default function FecharComandaModal({
     };
   };
 
+  const gerarConteudoCSV = () => {
+    try {
+      const resumo = getResumoConta();
+      console.log("(NOBRIDGE) LOG Gerando CSV com resumo:", resumo);
+
+      let csvContent = "Mesa,Item,Quantidade,Preço Unitário,Subtotal\n";
+      resumo.itens.forEach((item) => {
+        csvContent += `${resumo.numero},${item.item},${
+          item.quantidade
+        },${item.precoUnitario.toFixed(2)},${item.subtotal.toFixed(2)}\n`;
+      });
+
+      // Garantir que os valores sejam números antes de formatar
+      const totalSemDesconto = parseFloat(resumo.totalSemDesconto) || 0;
+      const desconto = parseFloat(resumo.desconto) || 0;
+      const total = parseFloat(resumo.total) || 0;
+      const pago = parseFloat(resumo.pago) || 0;
+      const restante = parseFloat(resumo.restante) || 0;
+
+      csvContent += `,,Total Sem Desconto,,${totalSemDesconto.toFixed(2)}\n`;
+      csvContent += `,,Desconto,,${desconto.toFixed(2)}\n`;
+      csvContent += `,,Total Geral,,${total.toFixed(2)}\n`;
+      csvContent += `,,Pago,,${pago.toFixed(2)}\n`;
+      csvContent += `,,Restante,,${restante.toFixed(2)}\n`;
+
+      console.log("(NOBRIDGE) LOG Conteúdo CSV gerado:", csvContent);
+      return csvContent;
+    } catch (error) {
+      console.error("(NOBRIDGE) ERROR Erro ao gerar conteúdo CSV:", error);
+      throw error;
+    }
+  };
+
+  const exportarCSV = async () => {
+    try {
+      const csvContent = gerarConteudoCSV();
+      const fileName = `comanda_mesa_${mesa?.numero || "desconhecida"}.csv`;
+      const filePath = `${FileSystem.cacheDirectory}${fileName}`; // Direto no cacheDirectory
+
+      // Escrever o arquivo
+      await FileSystem.writeAsStringAsync(filePath, csvContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+      console.log("(NOBRIDGE) LOG Arquivo CSV salvo em:", filePath);
+
+      // Verificar se o compartilhamento tá disponível
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) {
+        Alert.alert("Erro", "Compartilhamento não disponível no dispositivo.");
+        return;
+      }
+
+      // Compartilhar o arquivo
+      await Sharing.shareAsync(filePath, {
+        mimeType: "text/csv",
+        dialogTitle: "Compartilhar Comanda CSV",
+      });
+
+      console.log("(NOBRIDGE) LOG CSV compartilhado com sucesso");
+      Alert.alert(
+        "Sucesso",
+        `Comanda exportada como ${fileName} e pronta para compartilhar!`
+      );
+    } catch (error) {
+      console.error(
+        "(NOBRIDGE) ERROR Erro ao exportar ou compartilhar CSV:",
+        error
+      );
+      Alert.alert("Erro", `Falha ao exportar CSV: ${error.message}`);
+      throw error;
+    }
+  };
+
   const handleFecharComanda = async () => {
     if (!mesa || isSubmitting) return;
     const totalSemDesconto = parseFloat(calcularTotalSemDesconto());
@@ -167,27 +242,7 @@ export default function FecharComandaModal({
       });
 
       await removerPedidosDaMesa(mesa.numero);
-      await fecharMesa(mesa.id, {
-        valorPago: pagoTotal,
-        valorRestante: 0,
-        valorRecebido: recebido,
-        troco,
-        desconto: descontoNum, // Inclui o desconto nos dados salvos
-        status: "fechada",
-      });
-      console.log("Atualizando mesa após fechamento total");
-      onAtualizarMesa({
-        ...mesa,
-        valorPago: pagoTotal,
-        valorRestante: 0,
-        valorRecebido: recebido,
-        troco,
-        desconto: descontoNum,
-        status: "fechada",
-      });
-      Alert.alert("Sucesso", "Comanda fechada com sucesso!");
-      console.log("Chamando onFecharComanda após fechamento total");
-      onFecharComanda();
+      // ... (resto do código existente)
     } catch (error) {
       Alert.alert(
         "Erro",
@@ -196,7 +251,7 @@ export default function FecharComandaModal({
       console.error("Erro ao fechar comanda:", error);
     } finally {
       setIsSubmitting(false);
-      setDesconto(""); // Limpa o campo de desconto
+      setDesconto("");
     }
   };
 
@@ -466,6 +521,14 @@ export default function FecharComandaModal({
               placeholderTextColor="#888"
             />
             <View style={styles.botoes}>
+              <CustomButton
+                title="Exportar CSV"
+                onPress={async () => {
+                  await exportarCSV();
+                }}
+                color="#1E90FF" // Azul pra destacar
+                disabled={isSubmitting || pedidos.length === 0}
+              />
               <CustomButton
                 title="Enviar via WhatsApp"
                 onPress={handleEnviarWhatsApp}
