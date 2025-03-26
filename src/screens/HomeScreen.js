@@ -11,6 +11,7 @@ import {
   TextInput,
   Modal,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native"; // Importe aqui
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
@@ -35,6 +36,7 @@ import {
 import { ensureFirebaseInitialized } from "../services/firebase";
 
 export default function HomeScreen() {
+  const navigation = useNavigation(); // Use aqui, no nível do componente
   const [searchText, setSearchText] = useState("");
   const [mesas, setMesas] = useState([]);
   const [pedidos, setPedidos] = useState([]);
@@ -49,7 +51,7 @@ export default function HomeScreen() {
   const [drawer, setDrawer] = useState(null);
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
   const [password, setPassword] = useState("");
-  const [actionToPerform, setActionToPerform] = useState(null); // Armazena a ação a ser executada após a senha
+  const [actionToPerform, setActionToPerform] = useState(null);
 
   useEffect(() => {
     let unsubscribeMesas, unsubscribePedidos, unsubscribeEstoque;
@@ -407,8 +409,8 @@ export default function HomeScreen() {
   };
 
   const checkPassword = (action) => {
-    setActionToPerform(() => action); // Armazena a ação a ser executada
-    setPasswordModalVisible(true); // Abre o modal
+    setActionToPerform(() => action);
+    setPasswordModalVisible(true);
   };
 
   const handlePasswordSubmit = () => {
@@ -416,7 +418,7 @@ export default function HomeScreen() {
       setPasswordModalVisible(false);
       setPassword("");
       if (actionToPerform) {
-        actionToPerform(); // Executa a ação armazenada
+        actionToPerform();
       }
     } else {
       Alert.alert("Erro", "Senha incorreta!");
@@ -470,6 +472,16 @@ export default function HomeScreen() {
               drawer.closeDrawer();
             })
           }
+          color="#FFA500"
+        />
+      </View>
+      <View style={{ marginVertical: 10 }}>
+        <Button
+          title="Histórico de Pedidos"
+          onPress={() => {
+            navigation.navigate("HistoricoPedidos");
+            drawer.closeDrawer();
+          }}
           color="#FFA500"
         />
       </View>

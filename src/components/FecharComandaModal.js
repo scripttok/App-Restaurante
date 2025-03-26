@@ -241,16 +241,59 @@ export default function FecharComandaModal({
         troco,
       });
 
+      // Preparar os dados do pedido para salvar
+      const pedidoData = {
+        numero: mesa.numero,
+        nomeCliente: mesa.nomeCliente,
+        totalSemDesconto: totalSemDesconto,
+        desconto: descontoNum,
+        total: totalComDesconto,
+        pago: pagoTotal,
+        recebido: recebido,
+        troco: troco,
+        dataFechamento: new Date().toISOString(), // Adiciona a data de fechamento
+        itens: pedidos.flatMap((p) => p.itens || []), // Inclui os itens do pedido
+      };
+
+      // Salvar os dados no armazenamento local
+      const fileName = `pedido_mesa_${mesa.numero}_${Date.now()}.json`; // Nome único com timestamp
+      const filePath = `${FileSystem.documentDirectory}${fileName}`;
+      await FileSystem.writeAsStringAsync(
+        filePath,
+        JSON.stringify(pedidoData),
+        {
+          encoding: FileSystem.EncodingType.UTF8,
+        }
+      );
+      console.log("(NOBRIDGE) LOG Pedido salvo localmente em:", filePath);
+
+      // Atualizar a mesa no Firebase e remover pedidos
+      const updates = {
+        valorPago: pagoTotal,
+        valorRestante: 0,
+        valorRecebido: recebido,
+        troco,
+        desconto: descontoNum,
+        status: "fechada",
+      };
       await removerPedidosDaMesa(mesa.numero);
-      // ... (resto do código existente)
+      await fecharMesa(mesa.id, updates);
+
+      // Atualizar a mesa no componente pai e fechar o modal
+      onAtualizarMesa({ ...mesa, ...updates });
+      onFecharComanda();
+
+      Alert.alert("Sucesso", "Comanda fechada e salva no histórico!");
     } catch (error) {
       Alert.alert(
         "Erro",
         `Não foi possível fechar a comanda: ${error.message}`
       );
-      console.error("Erro ao fechar comanda:", error);
+      console.error("(NOBRIDGE) ERROR Erro ao fechar comanda:", error);
     } finally {
       setIsSubmitting(false);
+      setValorPago("");
+      setValorRecebido("");
       setDesconto("");
     }
   };
