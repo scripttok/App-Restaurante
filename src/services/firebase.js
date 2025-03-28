@@ -1,5 +1,8 @@
 import firebase from "firebase/compat/app";
 import "firebase/compat/database";
+import "firebase/compat/auth"; // Adicione esta linha para autenticação
+import "firebase/compat/auth";
+import "firebase/compat/database";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAto25h5ZeIJ6GPlIsyuXAdc4igrgMgzhk",
@@ -19,13 +22,29 @@ export const ensureFirebaseInitialized = async () => {
     if (!firebase.apps.length) {
       console.log("(NOBRIDGE) LOG Inicializando Firebase...");
       await firebase.initializeApp(firebaseConfig);
-      console.log(
-        "(NOBRIDGE) LOG Firebase inicializado com sucesso em firebase.js"
-      );
-    } else {
-      console.log("(NOBRIDGE) LOG Firebase já inicializado.");
+
+      // Autenticação anônima com tratamento melhorado
+      try {
+        await firebase.auth().signInAnonymously();
+        console.log("(NOBRIDGE) LOG Autenticado anonimamente com sucesso");
+      } catch (authError) {
+        console.error(
+          "(NOBRIDGE) ERROR Falha na autenticação anônima:",
+          authError
+        );
+        throw new Error("Falha na autenticação");
+      }
+
+      console.log("(NOBRIDGE) LOG Firebase inicializado com sucesso");
     }
-    const db = firebase.database();
+
+    // Verifica se há usuário autenticado
+    const user = firebase.auth().currentUser;
+    if (!user) {
+      throw new Error("Nenhum usuário autenticado");
+    }
+
+    db = firebase.database();
     if (!db) {
       throw new Error("Falha ao obter referência do banco de dados Firebase.");
     }
