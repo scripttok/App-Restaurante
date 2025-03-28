@@ -72,9 +72,9 @@ export default function FecharComandaModal({
   };
 
   const calcularDivisao = () => {
-    const totalComDesconto = parseFloat(calcularTotalComDesconto());
+    const restante = parseFloat(calcularRestante()); // Usa o valor restante em vez do total
     const numDivisao = parseInt(divisao) || 1;
-    return (totalComDesconto / numDivisao).toFixed(2);
+    return (restante / numDivisao).toFixed(2);
   };
 
   const calcularTroco = () => {
@@ -280,19 +280,14 @@ export default function FecharComandaModal({
       Alert.alert("Erro", "Nenhum pedido para enviar.");
       return;
     }
+
     const totalSemDesconto = parseFloat(calcularTotalSemDesconto());
     const descontoNum = parseFloat(desconto) || 0;
+
     if (descontoNum > totalSemDesconto) {
       Alert.alert(
         "Erro",
         "O desconto não pode ser maior que o total sem desconto."
-      );
-      return;
-    }
-    if (!isPagamentoSuficiente()) {
-      Alert.alert(
-        "Erro",
-        "O valor recebido deve ser maior ou igual ao restante para enviar via WhatsApp."
       );
       return;
     }
@@ -302,9 +297,11 @@ export default function FecharComandaModal({
       Alert.alert("Erro", "Por favor, insira um número de telefone.");
       return;
     }
+
     if (!numeroLimpo.startsWith("+")) {
       numeroLimpo = `+55${numeroLimpo}`;
     }
+
     if (
       numeroLimpo.length < 12 ||
       (numeroLimpo.startsWith("+55") && numeroLimpo.length < 13)
@@ -328,32 +325,7 @@ export default function FecharComandaModal({
       const supported = await Linking.canOpenURL(whatsappUrl);
       if (supported) {
         await Linking.openURL(whatsappUrl);
-
-        const totalComDesconto = parseFloat(calcularTotalComDesconto());
-        const pagoAnterior = parseFloat(mesa?.valorPago || 0);
-        const pagoNovo = parseFloat(valorPago) || totalComDesconto;
-        const recebido = parseFloat(valorRecebido) || 0;
-        const troco = calcularTroco();
-        const pagoTotal = pagoAnterior + pagoNovo;
-
-        const updates = {
-          valorPago: pagoTotal,
-          valorRestante: 0,
-          valorRecebido: recebido,
-          troco,
-          desconto: descontoNum, // Inclui o desconto nos dados salvos
-          status: "fechada",
-        };
-
-        await removerPedidosDaMesa(mesa.numero);
-        await fecharMesa(mesa.id, updates);
-        onAtualizarMesa({
-          ...mesa,
-          ...updates,
-        });
-
-        Alert.alert("Sucesso", "Comanda enviada via WhatsApp e fechada!");
-        onFecharComanda();
+        Alert.alert("Sucesso", "Comanda enviada via WhatsApp!");
       } else {
         Alert.alert(
           "Erro",
@@ -363,12 +335,11 @@ export default function FecharComandaModal({
     } catch (error) {
       Alert.alert(
         "Erro",
-        `Não foi possível enviar via WhatsApp ou fechar a comanda: ${error.message}`
+        `Não foi possível enviar via WhatsApp: ${error.message}`
       );
       console.error("Erro ao enviar via WhatsApp:", error);
     } finally {
       setIsSubmitting(false);
-      setDesconto(""); // Limpa o campo de desconto
     }
   };
 
