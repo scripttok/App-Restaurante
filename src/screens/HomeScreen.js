@@ -21,6 +21,7 @@ import ControleEstoqueModal from "../components/ControleEstoqueModal";
 import GerenciarEstoqueCardapioModal from "../components/GerenciarEstoqueCardapioModal";
 import GerenciarFichasTecnicasModal from "../components/GerenciarFichasTecnicasModal";
 import * as Notifications from "expo-notifications";
+import { useNavigation } from "@react-navigation/native";
 import {
   adicionarMesaNoFirebase,
   getMesas,
@@ -50,6 +51,8 @@ export default function HomeScreen() {
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
   const [password, setPassword] = useState("");
   const [actionToPerform, setActionToPerform] = useState(null); // Armazena a ação a ser executada após a senha
+
+  const navigation = useNavigation();
 
   useEffect(() => {
     let unsubscribeMesas, unsubscribePedidos, unsubscribeEstoque;
@@ -470,6 +473,16 @@ export default function HomeScreen() {
               drawer.closeDrawer();
             })
           }
+          color="#FFA500"
+        />
+      </View>
+      <View style={{ marginVertical: 10 }}>
+        <Button
+          title="Histórico"
+          onPress={() => {
+            navigation.navigate("HistoricoPedidos");
+            drawer.closeDrawer();
+          }}
           color="#FFA500"
         />
       </View>
