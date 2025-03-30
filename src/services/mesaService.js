@@ -325,20 +325,48 @@ export const salvarHistoricoPedido = async (dadosPedido) => {
   const freshDb = await ensureFirebaseInitialized();
   try {
     const historicoRef = freshDb.ref("historicoPedidos");
+
+    // Preparar o objeto para salvar
     const novoHistorico = {
-      ...dadosPedido,
+      numero: dadosPedido.numero,
+      nomeCliente: dadosPedido.nomeCliente,
+      itens: Array.isArray(dadosPedido.itens)
+        ? dadosPedido.itens
+        : Object.values(dadosPedido.itens || {}),
+      totalSemDesconto: dadosPedido.totalSemDesconto,
+      desconto: dadosPedido.desconto,
+      total: dadosPedido.total,
+      pago: dadosPedido.pago,
+      recebido: dadosPedido.recebido,
+      troco: dadosPedido.troco,
       dataFechamento: firebase.database.ServerValue.TIMESTAMP,
+      // Garantir que historicoPagamentos seja um array válido
+      historicoPagamentos: Array.isArray(dadosPedido.historicoPagamentos)
+        ? dadosPedido.historicoPagamentos
+        : [],
     };
 
-    // Verifica se os itens estão no formato correto
-    if (novoHistorico.itens && !Array.isArray(novoHistorico.itens)) {
-      novoHistorico.itens = Object.values(novoHistorico.itens);
+    // Se houver pagamento atual mas não estiver no histórico, adicionamos
+    if (
+      dadosPedido.pago > 0 &&
+      novoHistorico.historicoPagamentos.length === 0
+    ) {
+      novoHistorico.historicoPagamentos.push({
+        valor: dadosPedido.pago,
+        metodo: dadosPedido.metodoPagamento || "dinheiro", // Valor padrão
+        data: new Date().toISOString(),
+      });
     }
 
     const novoHistoricoRef = historicoRef.push();
     await novoHistoricoRef.set(novoHistorico);
 
-    console.log("Histórico salvo no Firebase com ID:", novoHistoricoRef.key);
+    console.log(
+      "Histórico salvo com ID:",
+      novoHistoricoRef.key,
+      "Dados:",
+      novoHistorico
+    );
     return novoHistoricoRef.key;
   } catch (error) {
     console.error("Erro ao salvar histórico:", error);

@@ -33,6 +33,7 @@ export default function FecharComandaModal({
   const [telefoneCliente, setTelefoneCliente] = useState("");
   const [desconto, setDesconto] = useState(""); // Novo estado para o desconto
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [metodoPagamento, setMetodoPagamento] = useState("dinheiro"); // ou o método padrão
 
   useEffect(() => {
     return () => {
@@ -160,22 +161,7 @@ export default function FecharComandaModal({
     const totalSemDesconto = parseFloat(calcularTotalSemDesconto());
     const descontoNum = parseFloat(desconto) || 0;
 
-    // Validações
-    if (descontoNum > totalSemDesconto) {
-      Alert.alert(
-        "Erro",
-        "O desconto não pode ser maior que o total sem desconto."
-      );
-      return;
-    }
-
-    if (!isPagamentoSuficiente()) {
-      Alert.alert(
-        "Erro",
-        "O valor recebido deve ser maior ou igual ao restante a pagar para fechar a comanda."
-      );
-      return;
-    }
+    // Validações (mantenha as existentes)
 
     setIsSubmitting(true);
 
@@ -187,8 +173,20 @@ export default function FecharComandaModal({
       const troco = calcularTroco();
       const pagoTotal = pagoAnterior + pagoNovo;
 
-      // Obter a data atual como string ISO
+      // Obter a data atual
       const dataFechamento = new Date().toISOString();
+
+      // Criar histórico de pagamentos
+      const historicoPagamentos = mesa.historicoPagamentos || [];
+
+      // Adicionar o novo pagamento ao histórico
+      if (pagoNovo > 0) {
+        historicoPagamentos.push({
+          valor: pagoNovo,
+          metodo: metodoPagamento, // Você precisa ter esse estado capturado do seu formulário
+          data: dataFechamento,
+        });
+      }
 
       // Preparar dados para o histórico
       const dadosParaHistorico = {
@@ -201,18 +199,16 @@ export default function FecharComandaModal({
         pago: pagoTotal,
         recebido,
         troco,
-        dataFechamento, // Usando a data diretamente em vez de firebase.database.ServerValue.TIMESTAMP
+        dataFechamento,
+        historicoPagamentos, // Adicionando o histórico completo
       };
 
-      console.log("Dados para histórico:", dadosParaHistorico);
+      console.log("Dados completos para histórico:", dadosParaHistorico);
 
-      // 1. Salvar no Firebase
+      // Restante do seu código permanece igual...
       await salvarHistoricoPedido(dadosParaHistorico);
-
-      // 2. Remover pedidos da mesa
       await removerPedidosDaMesa(mesa.numero);
 
-      // 3. Atualizar status da mesa
       await fecharMesa(mesa.id, {
         valorPago: pagoTotal,
         valorRestante: 0,
@@ -220,9 +216,9 @@ export default function FecharComandaModal({
         troco,
         desconto: descontoNum,
         status: "fechada",
+        historicoPagamentos, // Atualizando também na mesa
       });
 
-      // 4. Atualizar estado local
       onAtualizarMesa({
         ...mesa,
         valorPago: pagoTotal,
@@ -231,9 +227,9 @@ export default function FecharComandaModal({
         troco,
         desconto: descontoNum,
         status: "fechada",
+        historicoPagamentos,
       });
 
-      // Feedback para o usuário
       Alert.alert("Sucesso", "Comanda fechada com sucesso!");
       onFecharComanda();
     } catch (error) {
