@@ -180,10 +180,10 @@ export default function FecharComandaModal({
       const historicoPagamentos = mesa.historicoPagamentos || [];
 
       // Adicionar o novo pagamento ao histórico
-      if (pagoNovo > 0) {
+      if (recebido > 0) {
         historicoPagamentos.push({
-          valor: pagoNovo,
-          metodo: metodoPagamento, // Você precisa ter esse estado capturado do seu formulário
+          valor: recebido, // Usa o valor recebido diretamente
+          metodo: metodoPagamento,
           data: dataFechamento,
         });
       }
@@ -196,11 +196,10 @@ export default function FecharComandaModal({
         totalSemDesconto,
         desconto: descontoNum,
         total: totalComDesconto,
-        pago: pagoTotal,
-        recebido,
+        recebido, // Mantém para referência
         troco,
         dataFechamento,
-        historicoPagamentos, // Adicionando o histórico completo
+        historicoPagamentos,
       };
 
       console.log("Dados completos para histórico:", dadosParaHistorico);

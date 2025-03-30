@@ -187,9 +187,11 @@ export default function HistoricoPedidosScreen() {
                     </View>
 
                     <View style={styles.detalheRow}>
-                      <Text style={styles.detalheLabel}>Total:</Text>
+                      <Text style={styles.detalheLabel}>Total da comanda:</Text>
                       <Text style={styles.detalheValue}>
-                        R$ {pedido.total.toFixed(2)}
+                        R${" "}
+                        {pedido.totalSemDesconto?.toFixed(2) ||
+                          pedido.total.toFixed(2)}
                       </Text>
                     </View>
 
@@ -205,47 +207,37 @@ export default function HistoricoPedidosScreen() {
                     )}
 
                     <View style={styles.detalheRow}>
-                      <Text style={styles.detalheLabel}>Total pago:</Text>
-                      <Text style={styles.detalheValue}>
-                        R${" "}
-                        {(
-                          pedido.historicoPagamentos?.reduce(
-                            (sum, p) => sum + p.valor,
-                            0
-                          ) + (pedido.recebido || 0)
-                        ).toFixed(2)}
+                      <Text
+                        style={[styles.detalheLabel, styles.totalPagoLabel]}
+                      >
+                        Total pago:
+                      </Text>
+                      <Text
+                        style={[styles.detalheValue, styles.totalPagoValue]}
+                      >
+                        R$ {pedido.recebido?.toFixed(2) || "0.00"}
                       </Text>
                     </View>
 
                     {pedido.historicoPagamentos?.length > 0 && (
                       <View style={styles.pagamentosContainer}>
-                        <Text style={styles.detalheLabel}>Pagamentos:</Text>
-                        {pedido.historicoPagamentos.map((pagamento, index) => {
-                          let dataFormatada;
-                          try {
-                            dataFormatada = new Date(
-                              pagamento.data
-                            ).toLocaleDateString("pt-BR");
-                          } catch (e) {
-                            dataFormatada = "Data inválida";
-                          }
-
-                          return (
-                            <View key={index} style={styles.pagamentoRow}>
-                              <Text style={styles.pagamentoData}>
-                                {dataFormatada}:
-                              </Text>
-                              <Text style={styles.pagamentoValor}>
-                                R$ {pagamento.valor?.toFixed(2) || "0.00"}
-                              </Text>
-                              {pagamento.metodo && (
-                                <Text style={styles.pagamentoMetodo}>
-                                  ({pagamento.metodo})
-                                </Text>
+                        <Text style={styles.detalheLabel}>
+                          Detalhe dos pagamentos:
+                        </Text>
+                        {pedido.historicoPagamentos.map((pagamento, index) => (
+                          <View key={index} style={styles.pagamentoRow}>
+                            <Text style={styles.pagamentoData}>
+                              {new Date(pagamento.data).toLocaleDateString(
+                                "pt-BR"
                               )}
-                            </View>
-                          );
-                        })}
+                              :
+                            </Text>
+                            <Text style={styles.pagamentoValor}>
+                              R$ {pagamento.valor.toFixed(2)} (
+                              {pagamento.metodo})
+                            </Text>
+                          </View>
+                        ))}
                       </View>
                     )}
 
@@ -260,7 +252,7 @@ export default function HistoricoPedidosScreen() {
                       <View style={styles.detalheRow}>
                         <Text style={styles.detalheLabel}>Status:</Text>
                         <Text style={[styles.detalheValue, styles.quitadoText]}>
-                          Quitado
+                          PAGO
                         </Text>
                       </View>
                     )}
@@ -444,5 +436,37 @@ const styles = StyleSheet.create({
     color: "#555",
     marginLeft: 8,
     fontStyle: "italic",
+  },
+
+  secaoTotais: {
+    backgroundColor: "#f9f9f9",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  secaoTitulo: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#5C4329",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  totalLabel: {
+    fontWeight: "600",
+    color: "#333",
+  },
+  totalValue: {
+    fontWeight: "bold",
+    color: "#5C4329",
+    fontSize: 16,
+  },
+  totalPagoLabel: {
+    fontWeight: "600",
+    color: "#27AE60", // Verde para valores positivos
+  },
+  totalPagoValue: {
+    fontWeight: "bold",
+    color: "#27AE60",
+    fontSize: 16,
   },
 });
