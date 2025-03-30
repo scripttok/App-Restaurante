@@ -10,7 +10,7 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import {
   getHistoricoPedidos,
-  ensureFirebaseInitialized,
+  removerPedidoDoHistorico,
 } from "../services/mesaService";
 
 export default function HistoricoPedidosScreen() {
@@ -40,15 +40,17 @@ export default function HistoricoPedidosScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              const freshDb = await ensureFirebaseInitialized();
-              await freshDb.ref(`historicoPedidos/${pedidoId}`).remove();
-
-              // Atualiza o estado local imediatamente
+              // Atualização otimista do UI
               setHistorico((prev) => prev.filter((p) => p.id !== pedidoId));
+
+              // Remove do Firebase
+              await removerPedidoDoHistorico(pedidoId);
 
               Alert.alert("Sucesso", "Pedido removido do histórico!");
             } catch (error) {
-              console.error("Erro ao remover pedido:", error);
+              // Reverte a UI em caso de erro
+              setHistorico((prev) => [...prev]); // Força re-renderização
+              console.error("(NOBRIDGE) ERROR Detalhes do erro:", error);
               Alert.alert(
                 "Erro",
                 "Não foi possível remover o pedido. Tente novamente."

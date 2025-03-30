@@ -304,6 +304,23 @@ export const getCardapio = (callback) => {
   };
 };
 
+export const removerPedidoDoFirebase = async (pedidoId) => {
+  const db = await ensureFirebaseInitialized();
+  return db.ref(`historicoPedidos/${pedidoId}`).remove();
+};
+
+export const removerPedidoDoHistorico = async (pedidoId) => {
+  try {
+    const db = await ensureFirebaseInitialized();
+    await db.ref(`historicoPedidos/${pedidoId}`).remove();
+    console.log(`(NOBRIDGE) LOG Pedido ${pedidoId} removido com sucesso`);
+    return true;
+  } catch (error) {
+    console.error("(NOBRIDGE) ERROR Erro ao remover pedido:", error);
+    throw error;
+  }
+};
+
 export const salvarHistoricoPedido = async (dadosPedido) => {
   const freshDb = await ensureFirebaseInitialized();
   try {
