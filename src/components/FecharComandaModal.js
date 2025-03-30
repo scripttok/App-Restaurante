@@ -15,6 +15,8 @@ import {
   enviarComandaViaWhatsApp,
   removerPedidosDaMesa,
 } from "../services/mesaService";
+import * as FileSystem from "expo-file-system";
+import { salvarHistoricoPedido } from "../services/mesaService";
 
 export default function FecharComandaModal({
   visible,
@@ -127,10 +129,38 @@ export default function FecharComandaModal({
     };
   };
 
+  const salvarPedidoNoHistorico = async (dadosPedido) => {
+    try {
+      const dataAtual = new Date().toISOString();
+      const nomeArquivo = `pedido_mesa_${mesa.numero}_${dataAtual.replace(
+        /[:.]/g,
+        "-"
+      )}.json`;
+      const caminhoArquivo = `${FileSystem.documentDirectory}${nomeArquivo}`;
+
+      await FileSystem.writeAsStringAsync(
+        caminhoArquivo,
+        JSON.stringify({
+          ...dadosPedido,
+          dataFechamento: dataAtual,
+          fileName: nomeArquivo,
+        })
+      );
+
+      console.log("Pedido salvo no histórico:", nomeArquivo);
+    } catch (error) {
+      console.error("Erro ao salvar pedido no histórico:", error);
+      throw error;
+    }
+  };
+
   const handleFecharComanda = async () => {
     if (!mesa || isSubmitting) return;
+
     const totalSemDesconto = parseFloat(calcularTotalSemDesconto());
     const descontoNum = parseFloat(desconto) || 0;
+
+    // Validações
     if (descontoNum > totalSemDesconto) {
       Alert.alert(
         "Erro",
@@ -138,6 +168,7 @@ export default function FecharComandaModal({
       );
       return;
     }
+
     if (!isPagamentoSuficiente()) {
       Alert.alert(
         "Erro",
@@ -145,7 +176,9 @@ export default function FecharComandaModal({
       );
       return;
     }
+
     setIsSubmitting(true);
+
     try {
       const totalComDesconto = parseFloat(calcularTotalComDesconto());
       const pagoAnterior = mesa?.valorPago || 0;
@@ -154,28 +187,42 @@ export default function FecharComandaModal({
       const troco = calcularTroco();
       const pagoTotal = pagoAnterior + pagoNovo;
 
-      console.log("Fechando comanda:", {
-        mesaId: mesa.id,
+      // Obter a data atual como string ISO
+      const dataFechamento = new Date().toISOString();
+
+      // Preparar dados para o histórico
+      const dadosParaHistorico = {
+        numero: mesa.numero,
+        nomeCliente: mesa.nomeCliente,
+        itens: getResumoConta().itens,
         totalSemDesconto,
         desconto: descontoNum,
-        totalComDesconto,
-        pagoAnterior,
-        pagoNovo,
-        pagoTotal,
+        total: totalComDesconto,
+        pago: pagoTotal,
         recebido,
         troco,
-      });
+        dataFechamento, // Usando a data diretamente em vez de firebase.database.ServerValue.TIMESTAMP
+      };
 
+      console.log("Dados para histórico:", dadosParaHistorico);
+
+      // 1. Salvar no Firebase
+      await salvarHistoricoPedido(dadosParaHistorico);
+
+      // 2. Remover pedidos da mesa
       await removerPedidosDaMesa(mesa.numero);
+
+      // 3. Atualizar status da mesa
       await fecharMesa(mesa.id, {
         valorPago: pagoTotal,
         valorRestante: 0,
         valorRecebido: recebido,
         troco,
-        desconto: descontoNum, // Inclui o desconto nos dados salvos
+        desconto: descontoNum,
         status: "fechada",
       });
-      console.log("Atualizando mesa após fechamento total");
+
+      // 4. Atualizar estado local
       onAtualizarMesa({
         ...mesa,
         valorPago: pagoTotal,
@@ -185,18 +232,21 @@ export default function FecharComandaModal({
         desconto: descontoNum,
         status: "fechada",
       });
+
+      // Feedback para o usuário
       Alert.alert("Sucesso", "Comanda fechada com sucesso!");
-      console.log("Chamando onFecharComanda após fechamento total");
       onFecharComanda();
     } catch (error) {
+      console.error("Erro completo ao fechar comanda:", error);
       Alert.alert(
         "Erro",
         `Não foi possível fechar a comanda: ${error.message}`
       );
-      console.error("Erro ao fechar comanda:", error);
     } finally {
       setIsSubmitting(false);
-      setDesconto(""); // Limpa o campo de desconto
+      setDesconto("");
+      setValorPago("");
+      setValorRecebido("");
     }
   };
 

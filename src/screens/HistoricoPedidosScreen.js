@@ -8,43 +8,28 @@ import {
   Alert,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import * as FileSystem from "expo-file-system";
+import {
+  getHistoricoPedidos,
+  ensureFirebaseInitialized,
+} from "../services/mesaService";
 
 export default function HistoricoPedidosScreen() {
   const navigation = useNavigation();
-  const [pedidosSalvos, setPedidosSalvos] = useState([]);
+  const [historico, setHistorico] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    listarPedidosSalvos();
+    const unsubscribe = getHistoricoPedidos((data) => {
+      setHistorico(data);
+      setLoading(false);
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
-  const listarPedidosSalvos = async () => {
-    try {
-      const arquivos = await FileSystem.readDirectoryAsync(
-        FileSystem.documentDirectory
-      );
-      const pedidosArquivos = arquivos.filter(
-        (file) => file.startsWith("pedido_mesa_") && file.endsWith(".json")
-      );
-
-      const pedidos = await Promise.all(
-        pedidosArquivos.map(async (file) => {
-          const conteudo = await FileSystem.readAsStringAsync(
-            `${FileSystem.documentDirectory}${file}`
-          );
-          const pedido = JSON.parse(conteudo);
-          return { fileName: file, ...pedido };
-        })
-      );
-
-      setPedidosSalvos(pedidos);
-    } catch (error) {
-      console.error("(NOBRIDGE) ERROR Erro ao listar pedidos salvos:", error);
-      setPedidosSalvos([]);
-    }
-  };
-
-  const removerPedido = async (fileName) => {
+  const removerPedido = async (pedidoId) => {
     Alert.alert(
       "Confirmar Remoção",
       "Tem certeza que deseja remover este pedido do histórico?",
@@ -55,19 +40,18 @@ export default function HistoricoPedidosScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              const filePath = `${FileSystem.documentDirectory}${fileName}`;
-              await FileSystem.deleteAsync(filePath);
-              console.log("(NOBRIDGE) LOG Pedido removido:", filePath);
-              // Atualizar a lista após remoção
-              setPedidosSalvos((prev) =>
-                prev.filter((p) => p.fileName !== fileName)
-              );
+              const freshDb = await ensureFirebaseInitialized();
+              await freshDb.ref(`historicoPedidos/${pedidoId}`).remove();
+
+              // Atualiza o estado local imediatamente
+              setHistorico((prev) => prev.filter((p) => p.id !== pedidoId));
+
               Alert.alert("Sucesso", "Pedido removido do histórico!");
             } catch (error) {
-              console.error("(NOBRIDGE) ERROR Erro ao remover pedido:", error);
+              console.error("Erro ao remover pedido:", error);
               Alert.alert(
                 "Erro",
-                `Não foi possível remover o pedido: ${error.message}`
+                "Não foi possível remover o pedido. Tente novamente."
               );
             }
           },
@@ -79,43 +63,75 @@ export default function HistoricoPedidosScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.titulo}>Histórico de Pedidos</Text>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {pedidosSalvos.length === 0 ? (
-          <Text style={styles.semPedidos}>Nenhum pedido salvo encontrado.</Text>
-        ) : (
-          pedidosSalvos.map((pedido, index) => (
-            <View key={index} style={styles.pedidoCard}>
-              <Text style={styles.pedidoTitle}>Mesa {pedido.numero}</Text>
-              <Text style={styles.pedidoText}>
-                Cliente: {pedido.nomeCliente}
-              </Text>
-              <Text style={styles.pedidoText}>
-                Total Sem Desconto: R$ {pedido.totalSemDesconto}
-              </Text>
-              <Text style={styles.pedidoText}>
-                Desconto: R$ {pedido.desconto}
-              </Text>
-              <Text style={styles.pedidoText}>Total: R$ {pedido.total}</Text>
-              <Text style={styles.pedidoText}>Pago: R$ {pedido.pago}</Text>
-              <Text style={styles.pedidoText}>
-                Recebido: R$ {pedido.recebido}
-              </Text>
-              <Text style={styles.pedidoText}>Troco: R$ {pedido.troco}</Text>
-              <Text style={styles.pedidoText}>
-                Data de Fechamento:{" "}
-                {new Date(pedido.dataFechamento).toLocaleString()}
-              </Text>
-              <Text style={styles.pedidoText}>Arquivo: {pedido.fileName}</Text>
-              <TouchableOpacity
-                style={styles.removerButton}
-                onPress={() => removerPedido(pedido.fileName)}
-              >
-                <Text style={styles.removerButtonText}>Remover</Text>
-              </TouchableOpacity>
-            </View>
-          ))
-        )}
-      </ScrollView>
+
+      {loading ? (
+        <Text style={styles.loading}>Carregando histórico...</Text>
+      ) : (
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          {historico.length === 0 ? (
+            <Text style={styles.semPedidos}>Nenhum pedido no histórico.</Text>
+          ) : (
+            historico.map((pedido) => (
+              <View key={pedido.id} style={styles.pedidoCard}>
+                <Text style={styles.pedidoTitle}>Mesa {pedido.numero}</Text>
+                <Text style={styles.pedidoText}>
+                  Cliente: {pedido.nomeCliente}
+                </Text>
+
+                {/* Lista de itens */}
+                {pedido.itens?.map((item, i) => (
+                  <Text key={`${pedido.id}-${i}`} style={styles.pedidoItem}>
+                    {item.item} x{item.quantidade} - R${" "}
+                    {item.subtotal.toFixed(2)}
+                  </Text>
+                ))}
+
+                <Text style={styles.pedidoTotal}>
+                  Total Sem Desconto: R$ {pedido.totalSemDesconto.toFixed(2)}
+                </Text>
+
+                {pedido.desconto > 0 && (
+                  <Text style={styles.pedidoTotal}>
+                    Desconto: R$ {pedido.desconto.toFixed(2)}
+                  </Text>
+                )}
+
+                <Text style={styles.pedidoTotal}>
+                  Total: R$ {pedido.total.toFixed(2)}
+                </Text>
+
+                <Text style={styles.pedidoTotal}>
+                  Pago: R$ {pedido.pago.toFixed(2)}
+                </Text>
+
+                {pedido.recebido > 0 && (
+                  <Text style={styles.pedidoTotal}>
+                    Recebido: R$ {pedido.recebido.toFixed(2)}
+                  </Text>
+                )}
+
+                {pedido.troco > 0 && (
+                  <Text style={styles.pedidoTotal}>
+                    Troco: R$ {pedido.troco.toFixed(2)}
+                  </Text>
+                )}
+
+                <Text style={styles.pedidoData}>
+                  {new Date(pedido.dataFechamento).toLocaleString("pt-BR")}
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.removerButton}
+                  onPress={() => removerPedido(pedido.id)}
+                >
+                  <Text style={styles.removerButtonText}>Remover</Text>
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      )}
+
       <TouchableOpacity
         style={styles.voltarButton}
         onPress={() => navigation.navigate("Home")}
@@ -139,6 +155,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 20,
   },
+  loading: {
+    fontSize: 16,
+    color: "#FFFFFF",
+    textAlign: "center",
+    marginTop: 20,
+  },
   scrollContent: {
     paddingBottom: 20,
   },
@@ -152,6 +174,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 3,
     elevation: 3,
+    borderLeftWidth: 4,
+    borderLeftColor: "#FFA500",
   },
   pedidoTitle: {
     fontSize: 18,
@@ -163,6 +187,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#333",
     marginBottom: 5,
+  },
+  pedidoItem: {
+    fontSize: 14,
+    color: "#555",
+    marginLeft: 10,
+    marginBottom: 3,
+  },
+  pedidoTotal: {
+    fontSize: 15,
+    fontWeight: "bold",
+    color: "#333",
+    marginTop: 5,
+  },
+  pedidoData: {
+    fontSize: 13,
+    color: "#777",
+    marginTop: 5,
+    fontStyle: "italic",
   },
   semPedidos: {
     fontSize: 16,

@@ -22,6 +22,7 @@ import GerenciarEstoqueCardapioModal from "../components/GerenciarEstoqueCardapi
 import GerenciarFichasTecnicasModal from "../components/GerenciarFichasTecnicasModal";
 import * as Notifications from "expo-notifications";
 import { useNavigation } from "@react-navigation/native";
+
 import {
   adicionarMesaNoFirebase,
   getMesas,

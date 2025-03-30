@@ -304,6 +304,83 @@ export const getCardapio = (callback) => {
   };
 };
 
+export const salvarHistoricoPedido = async (dadosPedido) => {
+  const freshDb = await ensureFirebaseInitialized();
+  try {
+    const historicoRef = freshDb.ref("historicoPedidos");
+    const novoHistorico = {
+      ...dadosPedido,
+      dataFechamento: firebase.database.ServerValue.TIMESTAMP,
+    };
+
+    // Verifica se os itens estão no formato correto
+    if (novoHistorico.itens && !Array.isArray(novoHistorico.itens)) {
+      novoHistorico.itens = Object.values(novoHistorico.itens);
+    }
+
+    const novoHistoricoRef = historicoRef.push();
+    await novoHistoricoRef.set(novoHistorico);
+
+    console.log("Histórico salvo no Firebase com ID:", novoHistoricoRef.key);
+    return novoHistoricoRef.key;
+  } catch (error) {
+    console.error("Erro ao salvar histórico:", error);
+    throw error;
+  }
+};
+
+export const getHistoricoPedidos = (callback) => {
+  let ref;
+  const setupListener = async () => {
+    try {
+      const freshDb = await ensureFirebaseInitialized();
+      ref = freshDb.ref("historicoPedidos");
+
+      // Ordena por data decrescente e limita a 100 itens
+      ref
+        .orderByChild("dataFechamento")
+        .limitToLast(100)
+        .on(
+          "value",
+          (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+              const historico = Object.entries(data).map(([id, value]) => ({
+                id,
+                ...value,
+                dataFechamento: value.dataFechamento
+                  ? new Date(value.dataFechamento).toISOString()
+                  : "",
+              }));
+
+              // Ordena do mais recente para o mais antigo
+              historico.sort((a, b) =>
+                b.dataFechamento.localeCompare(a.dataFechamento)
+              );
+              callback(historico);
+            } else {
+              callback([]);
+            }
+          },
+          (error) => {
+            console.error("Erro ao obter histórico:", error);
+            callback([]);
+          }
+        );
+    } catch (error) {
+      console.error("Erro ao inicializar Firebase:", error);
+      callback([]);
+    }
+  };
+
+  setupListener();
+  return () => {
+    if (ref) {
+      ref.off("value");
+    }
+  };
+};
+
 const COMBOS_SUBITENS = {
   "Combo Energético": [
     { nome: "Água de coco", quantidade: 1 },
