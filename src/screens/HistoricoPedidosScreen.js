@@ -63,6 +63,24 @@ export default function HistoricoPedidosScreen() {
     );
   };
 
+  const calcularValorDevendo = (pedido) => {
+    // Soma TODOS os pagamentos (parciais + final)
+    const totalPagoParcias =
+      pedido.historicoPagamentos?.reduce(
+        (sum, pagamento) => sum + (parseFloat(pagamento.valor) || 0),
+        0
+      ) || 0;
+
+    const totalPagoFinal = parseFloat(pedido.recebido) || 0;
+    const totalPagoTotal = totalPagoParcias + totalPagoFinal;
+
+    // Considera quitado se o total pago for igual ou maior que o valor do pedido
+    const diferenca = pedido.total - totalPagoTotal;
+
+    // Se a diferença for menor que 1 centavo, considera quitado
+    return Math.abs(diferenca) < 0.01 ? 0 : Math.max(0, diferenca);
+  };
+
   const filtrarHistorico = () => {
     if (!searchTerm.trim()) return historico;
 
@@ -145,9 +163,9 @@ export default function HistoricoPedidosScreen() {
             </Text>
           ) : (
             filtrarHistorico().map((pedido) => {
-              const comandaQuitada =
-                Math.abs(pedido.total - pedido.recebido) < 0.01;
-              const valorDevendo = pedido.total - pedido.recebido;
+              const valorDevendo = calcularValorDevendo(pedido);
+
+              const comandaQuitada = valorDevendo <= 0;
 
               return (
                 <View key={pedido.id} style={styles.pedidoCard}>
@@ -187,9 +205,15 @@ export default function HistoricoPedidosScreen() {
                     )}
 
                     <View style={styles.detalheRow}>
-                      <Text style={styles.detalheLabel}>Recebido:</Text>
+                      <Text style={styles.detalheLabel}>Total pago:</Text>
                       <Text style={styles.detalheValue}>
-                        R$ {pedido.recebido?.toFixed(2) || "0.00"}
+                        R${" "}
+                        {(
+                          pedido.historicoPagamentos?.reduce(
+                            (sum, p) => sum + p.valor,
+                            0
+                          ) + (pedido.recebido || 0)
+                        ).toFixed(2)}
                       </Text>
                     </View>
 
@@ -225,11 +249,18 @@ export default function HistoricoPedidosScreen() {
                       </View>
                     )}
 
-                    {!comandaQuitada && valorDevendo >= 0.01 && (
+                    {!comandaQuitada ? (
                       <View style={styles.detalheRow}>
                         <Text style={styles.detalheLabel}>Devendo:</Text>
                         <Text style={[styles.detalheValue, styles.devencoText]}>
                           R$ {valorDevendo.toFixed(2)}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.detalheRow}>
+                        <Text style={styles.detalheLabel}>Status:</Text>
+                        <Text style={[styles.detalheValue, styles.quitadoText]}>
+                          Quitado
                         </Text>
                       </View>
                     )}
