@@ -103,7 +103,7 @@ export default function DetalhesMesaModal({
   }, [visible, mesa, pedidos]);
 
   const handleStatusToggle = async (pedidoId, entregueAtual) => {
-    if (entregueAtual) return; // Já entregue, não faz nada
+    if (entregueAtual) return;
 
     console.log("(NOBRIDGE) LOG Iniciando atualização de status para pedido:", {
       pedidoId,
@@ -117,7 +117,6 @@ export default function DetalhesMesaModal({
         status: !entregueAtual,
       });
 
-      // Atualizar pedidos locais após a mudança
       const novosPedidos = pedidosLocais.map((pedido) =>
         pedido.id === pedidoId
           ? { ...pedido, entregue: !entregueAtual }
@@ -129,10 +128,7 @@ export default function DetalhesMesaModal({
         message: error.message,
         stack: error.stack,
       });
-      Alert.alert(
-        "Erro",
-        "Não foi possível atualizar o status do pedido: " + error.message
-      );
+      Alert.alert("Erro", error.message); // Mostra o erro específico ao usuário
     }
   };
 

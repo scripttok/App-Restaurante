@@ -488,7 +488,6 @@ export const atualizarStatusPedido = async (pedidoId, novoStatus) => {
         console.log("(NOBRIDGE) LOG Processando item do pedido:", item);
         const { nome, quantidade } = item;
 
-        // Verifica se o item é um combo (baseado no mapeamento fixo)
         if (COMBOS_SUBITENS[nome]) {
           console.log("(NOBRIDGE) LOG Identificado como combo:", nome);
           const subItens = COMBOS_SUBITENS[nome];
@@ -499,10 +498,7 @@ export const atualizarStatusPedido = async (pedidoId, novoStatus) => {
             const quantidadeTotal = subItemQuantidade * (quantidade || 1);
             console.log(
               "(NOBRIDGE) LOG Baixando estoque para subitem do combo:",
-              {
-                nome: subItemNome,
-                quantidadeTotal,
-              }
+              { nome: subItemNome, quantidadeTotal }
             );
 
             const estoqueSnapshot = await db
@@ -551,7 +547,6 @@ export const atualizarStatusPedido = async (pedidoId, novoStatus) => {
             }
           }
         } else {
-          // Fluxo para itens não-combo
           console.log("(NOBRIDGE) LOG Baixando estoque para item não-combo:", {
             nome,
             quantidade,
@@ -596,12 +591,64 @@ export const atualizarStatusPedido = async (pedidoId, novoStatus) => {
         }
       }
     }
+
     console.log("(NOBRIDGE) LOG Status atualizado com sucesso para:", {
       pedidoId,
       status: novoStatus,
     });
   } catch (error) {
     console.error("(NOBRIDGE) ERROR Erro ao atualizar status:", error);
+    throw error;
+  }
+};
+
+export const validarEstoqueParaPedido = async (itens) => {
+  const db = await ensureFirebaseInitialized();
+  try {
+    for (const item of itens) {
+      const { nome, quantidade } = item;
+
+      if (COMBOS_SUBITENS[nome]) {
+        const subItens = COMBOS_SUBITENS[nome];
+        for (const subItem of subItens) {
+          const { nome: subItemNome, quantidade: subItemQuantidade } = subItem;
+          const quantidadeTotal = subItemQuantidade * (quantidade || 1);
+
+          const estoqueSnapshot = await db
+            .ref(`estoque/${subItemNome}`)
+            .once("value");
+          const estoqueData = estoqueSnapshot.val();
+
+          if (!estoqueData) {
+            throw new Error(`Item "${subItemNome}" não encontrado no estoque.`);
+          }
+
+          const quantidadeAtual = estoqueData.quantidade || 0;
+          if (quantidadeAtual < quantidadeTotal) {
+            throw new Error(
+              `Estoque insuficiente para "${subItemNome}". Necessário: ${quantidadeTotal}, Disponível: ${quantidadeAtual}.`
+            );
+          }
+        }
+      } else {
+        const estoqueSnapshot = await db.ref(`estoque/${nome}`).once("value");
+        const estoqueData = estoqueSnapshot.val();
+
+        if (!estoqueData) {
+          throw new Error(`Item "${nome}" não encontrado no estoque.`);
+        }
+
+        const quantidadeAtual = estoqueData.quantidade || 0;
+        if (quantidadeAtual < quantidade) {
+          throw new Error(
+            `Estoque insuficiente para "${nome}". Necessário: ${quantidade}, Disponível: ${quantidadeAtual}.`
+          );
+        }
+      }
+    }
+    return true; // Estoque validado com sucesso
+  } catch (error) {
+    console.error("(NOBRIDGE) ERROR Erro ao validar estoque:", error);
     throw error;
   }
 };

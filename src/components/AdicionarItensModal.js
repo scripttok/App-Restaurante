@@ -10,7 +10,7 @@ import {
   Image,
   Alert,
 } from "react-native";
-import { getCardapio } from "../services/mesaService";
+import { getCardapio, validarEstoqueParaPedido } from "../services/mesaService";
 
 const formatarNome = (nome) => {
   return nome.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
@@ -97,7 +97,7 @@ export default function AdicionarItensModal({
     );
   };
 
-  const handleConfirmar = () => {
+  const handleConfirmar = async () => {
     console.log(
       "(NOBRIDGE) LOG handleConfirmar - Itens selecionados antes de filtrar:",
       itensSelecionados
@@ -115,14 +115,7 @@ export default function AdicionarItensModal({
       itensValidos
     );
 
-    if (itensValidos.length > 0) {
-      console.log(
-        "(NOBRIDGE) LOG handleConfirmar - Chamando onConfirm com itens:",
-        itensValidos
-      );
-      onConfirm(itensValidos);
-      onClose();
-    } else {
+    if (itensValidos.length === 0) {
       console.warn(
         "(NOBRIDGE) WARN handleConfirmar - Nenhum item válido para adicionar"
       );
@@ -130,9 +123,21 @@ export default function AdicionarItensModal({
         "Atenção",
         "Selecione pelo menos um item válido antes de confirmar."
       );
+      return;
     }
 
-    setItensSelecionados([]);
+    try {
+      await validarEstoqueParaPedido(itensValidos);
+      console.log(
+        "(NOBRIDGE) LOG handleConfirmar - Estoque validado, chamando onConfirm com itens:",
+        itensValidos
+      );
+      onConfirm(itensValidos);
+      onClose();
+      setItensSelecionados([]);
+    } catch (error) {
+      Alert.alert("Erro", error.message); // Mostra o erro ao adicionar os itens
+    }
   };
 
   const abrirModalCategoria = (categoria) => {
