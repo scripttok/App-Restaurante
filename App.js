@@ -1,6 +1,14 @@
 import React, { useState } from "react";
 import { StatusBar } from "expo-status-bar";
-import { StyleSheet, View, Text, Button, Modal, TextInput } from "react-native";
+import {
+  StyleSheet,
+  View,
+  Text,
+  Button,
+  Modal,
+  TextInput,
+  Alert,
+} from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { NavigationContainer } from "@react-navigation/native";
 import { createDrawerNavigator } from "@react-navigation/drawer";
@@ -84,10 +92,12 @@ function DrawerContent({ navigation }) {
       <View style={{ marginVertical: 10 }}>
         <Button
           title="Histórico"
-          onPress={() => {
-            navigation.navigate("HistoricoPedidos");
-            navigation.closeDrawer();
-          }}
+          onPress={() =>
+            checkPassword(() => {
+              navigation.navigate("HistoricoPedidos");
+              navigation.closeDrawer();
+            })
+          }
           color="#FFA500"
         />
       </View>

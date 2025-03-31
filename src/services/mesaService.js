@@ -165,6 +165,11 @@ export const juntarMesas = async (mesaId1, mesaId2) => {
       throw new Error("Uma ou ambas as mesas não foram encontradas.");
     }
 
+    // Validação do status das mesas
+    if (mesa1.status === "fechada" || mesa2.status === "fechada") {
+      throw new Error("Não é possível juntar uma mesa com status 'fechada'.");
+    }
+
     const novoNumero = `${mesa1.numero}-${mesa2.numero}`;
     const novoNomeCliente = `${mesa1.nomeCliente} & ${mesa2.nomeCliente}`;
 
