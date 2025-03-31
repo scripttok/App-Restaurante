@@ -431,15 +431,33 @@ export const getHistoricoPedidos = (callback) => {
 };
 
 const COMBOS_SUBITENS = {
-  "Combo Energético": [
+  "Vodka Smirniff cG Coco e Red Bull": [
     { nome: "Água de coco", quantidade: 1 },
     { nome: "RedBull", quantidade: 1 },
-    { nome: "Coca-Cola", quantidade: 1 },
   ],
-  "Combo caipirinha": [
+  "Ballantines ou White Horse cG Coco e Red Bull": [
     { nome: "Água de coco", quantidade: 1 },
     { nome: "RedBull", quantidade: 1 },
-    { nome: "Coca-Cola", quantidade: 1 },
+  ],
+  "Red Label com Gelo Coco e Red Bull": [
+    { nome: "Água de coco", quantidade: 1 },
+    { nome: "RedBull", quantidade: 1 },
+  ],
+  "Whisky 12 anos com Gelo Coco e Red Bull": [
+    { nome: "Água de coco", quantidade: 1 },
+    { nome: "RedBull", quantidade: 1 },
+  ],
+  "1 Litro Whisky Ballantines ou W Horse + 4 Red Bull + 4 G Coco": [
+    { nome: "Água de coco", quantidade: 4 },
+    { nome: "RedBull", quantidade: 4 },
+  ],
+  "1 Litro Whisky Red Label  + 4 Red Bull + 4 G Coco": [
+    { nome: "Água de coco", quantidade: 4 },
+    { nome: "RedBull", quantidade: 4 },
+  ],
+  "1 Litro Whisky Black Label  + 4 Red Bull + 4 G Coco": [
+    { nome: "Água de coco", quantidade: 4 },
+    { nome: "RedBull", quantidade: 4 },
   ],
 };
 
@@ -748,7 +766,8 @@ export const adicionarNovoItemCardapio = async (
   precoUnitario,
   imagemUrl,
   categoria,
-  chaveUnica
+  chaveUnica,
+  descricao = ""
 ) => {
   const db = await ensureFirebaseInitialized();
   try {
@@ -758,12 +777,13 @@ export const adicionarNovoItemCardapio = async (
       imagemUrl,
       categoria,
       chaveUnica,
+      descricao,
     });
 
     const itemData = {
       nome,
       precoUnitario: parseFloat(precoUnitario) || 0,
-      descrição: "Item adicionado via estoque",
+      descrição: descricao || "Sem descrição",
       imagens: imagemUrl ? [imagemUrl] : [],
     };
 

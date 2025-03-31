@@ -28,12 +28,13 @@ export default function GerenciarEstoqueCardapioModal({ visible, onClose }) {
 
   // Lista de categorias existentes
   const categorias = [
-    "Bebidas com Alcool",
-    "Bebidas sem Alcool",
-    "Lanches",
-    "Refeições",
-    "Sucos e Agua",
+    "Cervejas",
+    "Bebidas Garrafas",
+    "Refrigerantes",
+    "Salgados e Porções ",
+    "Águas, Sucos e Outros",
     "Combos",
+    "Docês",
   ];
 
   const handleAdicionarEstoqueECardapio = async () => {
@@ -57,6 +58,7 @@ export default function GerenciarEstoqueCardapioModal({ visible, onClose }) {
         quantidadeEstoque,
         precoUnitario,
         categoria,
+        descricao, // Adiciona a descrição ao log para verificação
       });
 
       const chaveUnica = `${categoria.slice(0, 3)}${Date.now()}`; // Ex.: "Lan123456789"
@@ -69,18 +71,19 @@ export default function GerenciarEstoqueCardapioModal({ visible, onClose }) {
         unidade: unidadeEstoque || "unidades",
         estoqueMinimo: parseInt(estoqueMinimo, 10) || 0,
         chaveCardapio: chaveUnica,
-        categoria: categoria, // Adicionar a categoria aqui
+        categoria: categoria,
       };
       await db.ref(`estoque/${nomeLimpo}`).set(itemEstoque);
       console.log("(NOBRIDGE) LOG Estoque adicionado com sucesso");
 
-      // Adicionar ao cardápio
+      // Adicionar ao cardápio com a descrição
       await adicionarNovoItemCardapio(
         nomeLimpo,
         precoUnitario,
-        "",
+        "", // imagemUrl
         categoria,
-        chaveUnica
+        chaveUnica,
+        descricao // Passa o valor do estado descricao
       );
       console.log("(NOBRIDGE) LOG Cardápio adicionado com sucesso");
 
@@ -95,6 +98,7 @@ export default function GerenciarEstoqueCardapioModal({ visible, onClose }) {
       setEstoqueMinimo("");
       setPrecoUnitario("");
       setCategoria("");
+      setDescricao(""); // Limpa o campo descrição após sucesso
     } catch (error) {
       console.error("(NOBRIDGE) ERROR Erro no processo de adição:", error);
       Alert.alert("Erro", "Não foi possível adicionar: " + error.message);

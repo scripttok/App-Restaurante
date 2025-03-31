@@ -260,11 +260,9 @@ export default function ControleEstoqueModal({ visible, onClose }) {
   );
 
   const filteredEstoque = estoque.filter((item) => {
-    // Normaliza o nome do item e o texto de busca
-    const nomeNormalizado = removerAcentos(item.nome.toLowerCase());
+    // Se item ou item.nome for undefined, usa string vazia como fallback
+    const nomeNormalizado = removerAcentos((item?.nome || "").toLowerCase());
     const searchTextNormalizado = removerAcentos(searchText.toLowerCase());
-
-    // Verifica se o nome normalizado inclui o texto de busca normalizado
     return nomeNormalizado.includes(searchTextNormalizado);
   });
 
