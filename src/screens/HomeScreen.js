@@ -442,6 +442,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#5C4329",
   },
   header: {
+    marginTop: 30,
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 10,
