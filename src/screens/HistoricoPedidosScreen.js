@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import {
   getHistoricoPedidos,
   removerPedidoDoHistorico,
@@ -24,20 +24,52 @@ export default function HistoricoPedidosScreen() {
   const [searchTerm, setSearchTerm] = useState("");
   const [searchType, setSearchType] = useState("cliente");
 
-  const carregarHistorico = () => {
+  const carregarHistorico = useCallback(() => {
     setRefreshing(true);
     const unsubscribe = getHistoricoPedidos((data) => {
+      // Verificar se o componente ainda está montado antes de atualizar o estado
       setHistorico(data);
       setLoading(false);
       setRefreshing(false);
     });
     return unsubscribe;
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      setRefreshing(true);
+      const unsubscribe = getHistoricoPedidos((data) => {
+        setHistorico(data);
+        setLoading(false);
+        setRefreshing(false);
+      });
+
+      return () => {
+        if (unsubscribe) {
+          console.log("Desmontando listener de histórico");
+          unsubscribe();
+        }
+      };
+    }, [])
+  );
 
   useEffect(() => {
-    const unsubscribe = carregarHistorico();
-    return () => unsubscribe();
-  }, []);
+    let isMounted = true;
+    let unsubscribe = null;
+
+    const loadData = async () => {
+      unsubscribe = carregarHistorico();
+    };
+
+    loadData();
+
+    return () => {
+      isMounted = false;
+      if (unsubscribe) {
+        unsubscribe(); // Garantir que o listener seja removido
+      }
+    };
+  }, [carregarHistorico]);
 
   const removerPedido = async (pedidoId) => {
     Alert.alert(

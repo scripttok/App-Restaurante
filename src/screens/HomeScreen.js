@@ -1,15 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  Button,
   Alert,
   TouchableOpacity,
-  DrawerLayoutAndroid,
   ScrollView,
   TextInput,
-  Modal,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -21,8 +18,11 @@ import ControleEstoqueModal from "../components/ControleEstoqueModal";
 import GerenciarEstoqueCardapioModal from "../components/GerenciarEstoqueCardapioModal";
 import GerenciarFichasTecnicasModal from "../components/GerenciarFichasTecnicasModal";
 import * as Notifications from "expo-notifications";
-import { useNavigation } from "@react-navigation/native";
-
+import {
+  useNavigation,
+  useFocusEffect,
+  useRoute,
+} from "@react-navigation/native";
 import {
   adicionarMesaNoFirebase,
   getMesas,
@@ -48,94 +48,96 @@ export default function HomeScreen() {
   const [fichasTecnicasVisible, setFichasTecnicasVisible] = useState(false);
   const [mesaSelecionada, setMesaSelecionada] = useState(null);
   const [mesaDetalhes, setMesaDetalhes] = useState(null);
-  const [drawer, setDrawer] = useState(null);
-  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
-  const [password, setPassword] = useState("");
-  const [actionToPerform, setActionToPerform] = useState(null); // Armazena a ação a ser executada após a senha
 
   const navigation = useNavigation();
+  const route = useRoute();
+  const soundRef = useRef(null);
+  const unsubscribeRefs = useRef({
+    mesas: null,
+    pedidos: null,
+    estoque: null,
+  });
 
   useEffect(() => {
-    let unsubscribeMesas, unsubscribePedidos, unsubscribeEstoque;
-    let previousPedidosCount = 0;
-    let soundObject = null;
+    if (route.params?.adicionarMesa) {
+      setModalVisible(true);
+      navigation.setParams({ adicionarMesa: false });
+    }
+    if (route.params?.controleEstoque) {
+      setEstoqueVisible(true);
+      navigation.setParams({ controleEstoque: false });
+    }
+    if (route.params?.gerenciarEstoque) {
+      setGerenciarVisible(true);
+      navigation.setParams({ gerenciarEstoque: false });
+    }
+    if (route.params?.gerenciarFichas) {
+      setFichasTecnicasVisible(true);
+      navigation.setParams({ gerenciarFichas: false });
+    }
+  }, [route.params, navigation]);
 
-    const initializeFirebaseAndListeners = async () => {
-      try {
-        await ensureFirebaseInitialized();
-        console.log(
-          "(NOBRIDGE) LOG Firebase inicializado com sucesso no HomeScreen"
-        );
+  const setupListeners = useCallback(async () => {
+    try {
+      await ensureFirebaseInitialized();
+      if (unsubscribeRefs.current.mesas) unsubscribeRefs.current.mesas();
+      if (unsubscribeRefs.current.pedidos) unsubscribeRefs.current.pedidos();
+      if (unsubscribeRefs.current.estoque) unsubscribeRefs.current.estoque();
 
-        unsubscribeMesas = getMesas((data) => {
-          console.log("(NOBRIDGE) LOG Mesas recebidas no HomeScreen:", data);
-          setMesas(data);
-        });
-
-        unsubscribePedidos = getPedidos(async (data) => {
-          console.log("(NOBRIDGE) LOG Pedidos recebidos no HomeScreen:", data);
-          const currentPedidosCount = data.length;
-
-          if (
-            currentPedidosCount > previousPedidosCount &&
-            previousPedidosCount !== 0
-          ) {
-            try {
-              const { sound } = await Audio.Sound.createAsync(
-                require("../../assets/notification.mp3")
-              );
-              soundObject = sound;
-              await sound.playAsync();
-              console.log(
-                "(NOBRIDGE) LOG Som de notificação tocado com sucesso"
-              );
-            } catch (error) {
-              console.error(
-                "(NOBRIDGE) ERROR Erro ao tocar som de notificação:",
-                error
-              );
-            }
-          }
-          previousPedidosCount = currentPedidosCount;
-          setPedidos(data);
-        });
-
-        unsubscribeEstoque = getEstoque((data) => {
-          console.log("(NOBRIDGE) LOG Estoque recebido no HomeScreen:", data);
-          setEstoque(data);
-          const estoqueBaixo = data.filter(
-            (item) => item.quantidade <= item.estoqueMinimo
+      unsubscribeRefs.current.mesas = getMesas((data) => setMesas(data));
+      unsubscribeRefs.current.pedidos = getPedidos(async (data) => {
+        const currentPedidosCount = data.length;
+        const previousPedidosCount = pedidos.length;
+        if (
+          currentPedidosCount > previousPedidosCount &&
+          previousPedidosCount !== 0
+        ) {
+          const { sound } = await Audio.Sound.createAsync(
+            require("../../assets/notification.mp3")
           );
-          if (estoqueBaixo.length > 0) {
-            Alert.alert(
-              "Atenção: Estoque Baixo",
-              estoqueBaixo
-                .map(
-                  (item) => `${item.nome} (${item.quantidade} ${item.unidade})`
-                )
-                .join("\n")
-            );
-          }
-        });
-      } catch (error) {
-        console.error(
-          "(NOBRIDGE) ERROR Erro ao inicializar Firebase ou configurar listeners:",
-          error
+          soundRef.current = sound;
+          await sound.playAsync();
+        }
+        setPedidos(data);
+      });
+      unsubscribeRefs.current.estoque = getEstoque((data) => {
+        setEstoque(data);
+        const estoqueBaixo = data.filter(
+          (item) => item.quantidade <= item.estoqueMinimo
         );
-      }
-    };
+        if (estoqueBaixo.length > 0) {
+          Alert.alert(
+            "Atenção: Estoque Baixo",
+            estoqueBaixo
+              .map(
+                (item) => `${item.nome} (${item.quantidade} ${item.unidade})`
+              )
+              .join("\n")
+          );
+        }
+      });
+    } catch (error) {
+      console.error("Erro ao configurar listeners:", error);
+    }
+  }, [pedidos.length]);
 
-    initializeFirebaseAndListeners();
-
-    return () => {
-      if (unsubscribeMesas) unsubscribeMesas();
-      if (unsubscribePedidos) unsubscribePedidos();
-      if (unsubscribeEstoque) unsubscribeEstoque();
-      if (soundObject) {
-        soundObject.unloadAsync();
-      }
-    };
+  const cleanupListeners = useCallback(() => {
+    if (unsubscribeRefs.current.mesas) unsubscribeRefs.current.mesas();
+    if (unsubscribeRefs.current.pedidos) unsubscribeRefs.current.pedidos();
+    if (unsubscribeRefs.current.estoque) unsubscribeRefs.current.estoque();
+    if (soundRef.current) {
+      soundRef.current
+        .unloadAsync()
+        .catch((e) => console.error("Erro ao descarregar áudio:", e));
+    }
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      setupListeners();
+      return cleanupListeners;
+    }, [setupListeners, cleanupListeners])
+  );
 
   const adicionarMesa = async ({ nomeCliente, numeroMesa }) => {
     const mesaNumeroExistente = mesas.find(
@@ -145,7 +147,6 @@ export default function HomeScreen() {
       Alert.alert("Erro", `Já existe uma mesa com o número "${numeroMesa}".`);
       return;
     }
-
     const mesaNomeExistente = mesas.find(
       (mesa) => mesa.nomeCliente === nomeCliente
     );
@@ -153,7 +154,6 @@ export default function HomeScreen() {
       Alert.alert("Erro", `Já existe uma mesa com o cliente "${nomeCliente}".`);
       return;
     }
-
     const novaMesa = {
       numero: numeroMesa,
       nomeCliente,
@@ -179,22 +179,9 @@ export default function HomeScreen() {
       const novoX = (mesa.posX || 0) + (x || 0);
       const novoY = (mesa.posY || 0) + (y || 0);
       try {
-        console.log("(NOBRIDGE) LOG Tentando mover mesa:", {
-          mesaId,
-          novoX,
-          novoY,
-        });
         await atualizarMesa(mesaId, { posX: novoX, posY: novoY });
-        console.log("(NOBRIDGE) LOG Mesa movida com sucesso:", {
-          mesaId,
-          novoX,
-          novoY,
-        });
       } catch (error) {
-        console.error(
-          "(NOBRIDGE) ERROR Erro ao mover mesa no HomeScreen:",
-          error
-        );
+        console.error("Erro ao mover mesa:", error);
         Alert.alert("Erro", "Não foi possível mover a mesa: " + error.message);
       }
     }
@@ -249,7 +236,6 @@ export default function HomeScreen() {
   const separarMesas = async (mesaId) => {
     const mesa = mesas.find((m) => m.id === mesaId);
     if (!mesa || !mesa.numero.includes("-")) return;
-
     const [numero1, numero2] = mesa.numero.split("-");
     const [nome1, nome2] = mesa.nomeCliente.split(" & ");
     try {
@@ -259,19 +245,16 @@ export default function HomeScreen() {
       const pedidosMesaJunta = Object.entries(todosPedidos)
         .filter(([_, pedido]) => pedido.mesa === mesa.numero)
         .map(([id, pedido]) => ({ id, ...pedido }));
-
       const pedidosMesa1 = pedidosMesaJunta.filter(
         (p) => p.mesaOriginal === numero1 || !p.mesaOriginal
       );
       const pedidosMesa2 = pedidosMesaJunta.filter(
         (p) => p.mesaOriginal === numero2
       );
-
       if (pedidosMesa2.length === 0 && pedidosMesa1.length > 0) {
         const metade = Math.ceil(pedidosMesa1.length / 2);
         pedidosMesa2.push(...pedidosMesa1.splice(metade));
       }
-
       const novaMesa1 = {
         numero: numero1,
         nomeCliente: nome1,
@@ -288,7 +271,6 @@ export default function HomeScreen() {
         status: "aberta",
         createdAt: mesa.createdAt,
       };
-
       const updates = {};
       pedidosMesa1.forEach((p) => {
         updates[`pedidos/${p.id}/mesa`] = numero1;
@@ -298,18 +280,15 @@ export default function HomeScreen() {
         updates[`pedidos/${p.id}/mesa`] = numero2;
         if (p.mesaOriginal) updates[`pedidos/${p.id}/mesaOriginal`] = null;
       });
-
       await Promise.all([
         freshDb.ref(`mesas/${mesaId}`).remove(),
         adicionarMesaNoFirebase(novaMesa1),
         adicionarMesaNoFirebase(novaMesa2),
       ]);
-
       await freshDb.ref().update(updates);
-
       setMesaSelecionada(null);
     } catch (error) {
-      console.error("(NOBRIDGE) ERROR Erro ao separar mesas:", error);
+      console.error("Erro ao separar mesas:", error);
       Alert.alert(
         "Erro",
         "Não foi possível separar as mesas: " + error.message
@@ -317,12 +296,12 @@ export default function HomeScreen() {
     }
   };
 
-  const verPedidos = (mesa) => {
+  const verPedidos = useCallback((mesa) => {
     setMesaDetalhes(mesa);
     setDetalhesVisible(true);
-  };
+  }, []);
 
-  const handleAdicionarPedido = async (mesaNumero, itens) => {
+  const handleAdicionarPedido = useCallback(async (mesaNumero, itens) => {
     try {
       await adicionarPedido(mesaNumero, itens);
     } catch (error) {
@@ -331,43 +310,14 @@ export default function HomeScreen() {
         "Não foi possível adicionar o pedido: " + error.message
       );
     }
-  };
+  }, []);
 
-  async function registerForPushNotificationsAsync() {
-    let token;
-    if (Platform.OS === "android") {
-      await Notifications.setNotificationChannelAsync("default", {
-        name: "default",
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: "#FF231F7C",
-        sound: "default",
-      });
-    }
-
-    const { status: existingStatus } =
-      await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    if (existingStatus !== "granted") {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    if (finalStatus !== "granted") {
-      console.log("(NOBRIDGE) LOG Permissão de notificação negada");
-      return;
-    }
-
-    token = (await Notifications.getExpoPushTokenAsync()).data;
-    console.log("(NOBRIDGE) LOG Token de notificação:", token);
-    return token;
-  }
-
-  const handleAtualizarMesa = (novaMesa) => {
+  const handleAtualizarMesa = useCallback((novaMesa) => {
     setMesas((prevMesas) =>
       prevMesas.map((m) => (m.id === novaMesa.id ? novaMesa : m))
     );
     setMesaDetalhes(novaMesa);
-  };
+  }, []);
 
   const removerMesaLocal = async (mesaId) => {
     const mesa = mesas.find((m) => m.id === mesaId);
@@ -375,10 +325,8 @@ export default function HomeScreen() {
       Alert.alert("Erro", "Mesa não encontrada.");
       return;
     }
-
     const mesaPedidos = pedidos.filter((p) => p.mesa === mesa.numero);
     const temPedidosAbertos = mesaPedidos.some((p) => !p.entregue);
-
     if (mesa.status === "aberta" && mesaPedidos.length > 0) {
       Alert.alert(
         "Erro",
@@ -386,7 +334,6 @@ export default function HomeScreen() {
       );
       return;
     }
-
     if (mesa.status === "fechada" && temPedidosAbertos) {
       Alert.alert(
         "Erro",
@@ -394,7 +341,6 @@ export default function HomeScreen() {
       );
       return;
     }
-
     try {
       await removerPedidosDaMesa(mesa.numero);
       await removerMesa(mesaId);
@@ -410,205 +356,82 @@ export default function HomeScreen() {
     }
   };
 
-  const checkPassword = (action) => {
-    setActionToPerform(() => action); // Armazena a ação a ser executada
-    setPasswordModalVisible(true); // Abre o modal
-  };
-
-  const handlePasswordSubmit = () => {
-    if (password === "1249") {
-      setPasswordModalVisible(false);
-      setPassword("");
-      if (actionToPerform) {
-        actionToPerform(); // Executa a ação armazenada
-      }
-    } else {
-      Alert.alert("Erro", "Senha incorreta!");
-      setPassword("");
-    }
-  };
-
-  const navigationView = () => (
-    <View style={styles.drawerContainer}>
-      <Text style={styles.drawerTitle}>Menu</Text>
-      <View style={{ marginVertical: 10 }}>
-        <Button
-          title="Adicionar Mesa"
-          onPress={() => {
-            setModalVisible(true);
-            drawer.closeDrawer();
-          }}
-          color="#FFA500"
-        />
-      </View>
-      <View style={{ marginVertical: 10 }}>
-        <Button
-          title="Controle de Estoque"
-          onPress={() =>
-            checkPassword(() => {
-              setEstoqueVisible(true);
-              drawer.closeDrawer();
-            })
-          }
-          color="#FFA500"
-        />
-      </View>
-      <View style={{ marginVertical: 10 }}>
-        <Button
-          title="Gerenciar Estoque/Cardápio"
-          onPress={() =>
-            checkPassword(() => {
-              setGerenciarVisible(true);
-              drawer.closeDrawer();
-            })
-          }
-          color="#FFA500"
-        />
-      </View>
-      <View style={{ marginVertical: 10 }}>
-        <Button
-          title="Gerenciar Fichas Técnicas"
-          onPress={() =>
-            checkPassword(() => {
-              setFichasTecnicasVisible(true);
-              drawer.closeDrawer();
-            })
-          }
-          color="#FFA500"
-        />
-      </View>
-      <View style={{ marginVertical: 10 }}>
-        <Button
-          title="Histórico"
-          onPress={() => {
-            navigation.navigate("HistoricoPedidos");
-            drawer.closeDrawer();
-          }}
-          color="#FFA500"
-        />
-      </View>
-    </View>
-  );
-
   return (
-    <DrawerLayoutAndroid
-      ref={(ref) => setDrawer(ref)}
-      drawerWidth={250}
-      drawerPosition="left"
-      renderNavigationView={navigationView}
-    >
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => drawer.openDrawer()}>
-            <Icon name="menu" size={30} color="#FFF" />
-          </TouchableOpacity>
-          <View style={styles.titleContainer}>
-            <MaterialCommunityIcons
-              name="chef-hat"
-              size={30}
-              color="#FFF"
-              style={styles.chefHatIcon}
-            />
-            <Text style={styles.titulo}>Mesas do Restaurante</Text>
-          </View>
-        </View>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar por nome do cliente"
-          placeholderTextColor="#aaa"
-          value={searchText}
-          onChangeText={setSearchText}
-        />
-        <ScrollView contentContainerStyle={styles.grade}>
-          {mesas
-            .slice()
-            .filter((mesa) =>
-              mesa.nomeCliente.toLowerCase().includes(searchText.toLowerCase())
-            )
-            .sort((a, b) => {
-              const numA = parseInt(a.numero.match(/\d+/)[0], 10);
-              const numB = parseInt(b.numero.match(/\d+/)[0], 10);
-              return numA - numB;
-            })
-            .map((mesa) => {
-              const mesaPedidos = pedidos.filter((p) => p.mesa === mesa.numero);
-              return (
-                <Mesa
-                  key={mesa.id}
-                  mesa={mesa}
-                  pedidos={mesaPedidos}
-                  onMove={moverMesa}
-                  onDrop={soltarMesa}
-                  onVerPedidos={verPedidos}
-                />
-              );
-            })}
-        </ScrollView>
-        <AdicionarMesaModal
-          visible={modalVisible}
-          onClose={() => setModalVisible(false)}
-          onAdicionar={adicionarMesa}
-        />
-        {mesaDetalhes && (
-          <DetalhesMesaModal
-            visible={detalhesVisible}
-            onClose={() => setDetalhesVisible(false)}
-            mesa={mesaDetalhes}
-            pedidos={pedidos.filter((p) => p.mesa === mesaDetalhes.numero)}
-            onAdicionarPedido={handleAdicionarPedido}
-            onAtualizarMesa={handleAtualizarMesa}
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.openDrawer()}>
+          <Icon name="menu" size={30} color="#FFF" />
+        </TouchableOpacity>
+        <View style={styles.titleContainer}>
+          <MaterialCommunityIcons
+            name="chef-hat"
+            size={30}
+            color="#FFF"
+            style={styles.chefHatIcon}
           />
-        )}
-        <ControleEstoqueModal
-          visible={estoqueVisible}
-          onClose={() => setEstoqueVisible(false)}
-        />
-        <GerenciarEstoqueCardapioModal
-          visible={gerenciarVisible}
-          onClose={() => setGerenciarVisible(false)}
-        />
-        <GerenciarFichasTecnicasModal
-          visible={fichasTecnicasVisible}
-          onClose={() => setFichasTecnicasVisible(false)}
-        />
-        <Modal
-          visible={passwordModalVisible}
-          transparent={true}
-          animationType="slide"
-          onRequestClose={() => setPasswordModalVisible(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.passwordModal}>
-              <Text style={styles.modalTitle}>Digite a Senha</Text>
-              <TextInput
-                style={styles.passwordInput}
-                placeholder="Senha"
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
-                placeholderTextColor="#888"
-              />
-              <View style={styles.modalButtons}>
-                <Button
-                  title="Confirmar"
-                  onPress={handlePasswordSubmit}
-                  color="#FFA500"
-                />
-                <Button
-                  title="Cancelar"
-                  onPress={() => {
-                    setPasswordModalVisible(false);
-                    setPassword("");
-                    setActionToPerform(null);
-                  }}
-                  color="#FF4444"
-                />
-              </View>
-            </View>
-          </View>
-        </Modal>
+          <Text style={styles.titulo}>Mesas do Restaurante</Text>
+        </View>
       </View>
-    </DrawerLayoutAndroid>
+      <TextInput
+        style={styles.searchInput}
+        placeholder="Buscar por nome do cliente"
+        placeholderTextColor="#aaa"
+        value={searchText}
+        onChangeText={setSearchText}
+      />
+      <ScrollView contentContainerStyle={styles.grade}>
+        {mesas
+          .filter((mesa) =>
+            mesa.nomeCliente.toLowerCase().includes(searchText.toLowerCase())
+          )
+          .sort((a, b) => {
+            const numA = parseInt(a.numero.match(/\d+/)[0], 10);
+            const numB = parseInt(b.numero.match(/\d+/)[0], 10);
+            return numA - numB;
+          })
+          .map((mesa) => {
+            const mesaPedidos = pedidos.filter((p) => p.mesa === mesa.numero);
+            return (
+              <Mesa
+                key={mesa.id}
+                mesa={mesa}
+                pedidos={mesaPedidos}
+                onMove={moverMesa}
+                onDrop={soltarMesa}
+                onVerPedidos={verPedidos}
+              />
+            );
+          })}
+      </ScrollView>
+
+      <AdicionarMesaModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        onAdicionar={adicionarMesa}
+      />
+      {mesaDetalhes && (
+        <DetalhesMesaModal
+          visible={detalhesVisible}
+          onClose={() => setDetalhesVisible(false)}
+          mesa={mesaDetalhes}
+          pedidos={pedidos.filter((p) => p.mesa === mesaDetalhes.numero)}
+          onAdicionarPedido={handleAdicionarPedido}
+          onAtualizarMesa={handleAtualizarMesa}
+        />
+      )}
+      <ControleEstoqueModal
+        visible={estoqueVisible}
+        onClose={() => setEstoqueVisible(false)}
+      />
+      <GerenciarEstoqueCardapioModal
+        visible={gerenciarVisible}
+        onClose={() => setGerenciarVisible(false)}
+      />
+      <GerenciarFichasTecnicasModal
+        visible={fichasTecnicasVisible}
+        onClose={() => setFichasTecnicasVisible(false)}
+      />
+    </View>
   );
 }
 
@@ -644,17 +467,6 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     justifyContent: "space-around",
   },
-  drawerContainer: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: "#fff",
-  },
-  drawerTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 20,
-    textAlign: "center",
-  },
   searchInput: {
     height: 40,
     borderColor: "#fff",
@@ -664,39 +476,5 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     color: "#fff",
     backgroundColor: "rgba(255, 255, 255, 0.2)",
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-  },
-  passwordModal: {
-    width: "80%",
-    padding: 20,
-    backgroundColor: "#FFF",
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 15,
-    color: "#5C4329",
-  },
-  passwordInput: {
-    width: "100%",
-    height: 40,
-    borderColor: "#5C4329",
-    borderWidth: 1,
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    marginBottom: 20,
-    color: "#000",
-  },
-  modalButtons: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    width: "100%",
   },
 });
