@@ -11,7 +11,11 @@ import {
 } from "react-native";
 import AdicionarItensModal from "./AdicionarItensModal";
 import FecharComandaModal from "./FecharComandaModal";
-import { atualizarStatusPedido, getCardapio } from "../services/mesaService";
+import {
+  atualizarStatusPedido,
+  getCardapio,
+  reverterEstoquePedido,
+} from "../services/mesaService";
 import { ensureFirebaseInitialized } from "../services/firebase";
 
 export default function DetalhesMesaModal({
@@ -44,13 +48,21 @@ export default function DetalhesMesaModal({
     }
   };
 
-  const handleRemoverItem = async (pedidoId) => {
+  const handleRemoverItem = async (pedidoId, entregue) => {
     try {
       const freshDb = await ensureFirebaseInitialized();
       const pedidoRef = freshDb.ref(`pedidos/${pedidoId}`);
+      const pedidoSnapshot = await pedidoRef.once("value");
+      const pedido = pedidoSnapshot.val();
 
-      await pedidoRef.remove();
-      console.log("(NOBRIDGE) LOG Pedido removido do Firebase:", pedidoId);
+      if (pedido.entregue) {
+        // Se o pedido foi entregue, reverte o estoque
+        await reverterEstoquePedido(pedidoId);
+      } else {
+        // Se não foi entregue, apenas remove
+        await pedidoRef.remove();
+        console.log("(NOBRIDGE) LOG Pedido removido do Firebase:", pedidoId);
+      }
 
       const novosPedidos = pedidosLocais.filter(
         (pedido) => pedido.id !== pedidoId
@@ -175,17 +187,17 @@ export default function DetalhesMesaModal({
       <View style={styles.itemButtons}>
         <CustomButton
           title={item.entregue ? "Entregue" : "Entregar"}
-          onPress={() => !item.entregue && handleStatusToggle(item.id)}
+          onPress={() =>
+            !item.entregue && handleStatusToggle(item.id, item.entregue)
+          }
           color={item.entregue ? "#ff4444" : "#4CAF50"}
           disabled={item.entregue}
         />
-        {!item.entregue && (
-          <CustomButton
-            title="X"
-            onPress={() => handleRemoverItem(item.id)}
-            color="#ff4444"
-          />
-        )}
+        <CustomButton
+          title="X"
+          onPress={() => handleRemoverItem(item.id, item.entregue)}
+          color="#ff4444"
+        />
       </View>
     </View>
   );

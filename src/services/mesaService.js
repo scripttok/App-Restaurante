@@ -669,6 +669,80 @@ export const removerEstoque = async (itemId, quantidade) => {
   }
 };
 
+export const reverterEstoquePedido = async (pedidoId) => {
+  const db = await ensureFirebaseInitialized();
+  try {
+    console.log("(NOBRIDGE) LOG Revertendo estoque do pedido:", pedidoId);
+    const pedidoSnapshot = await db.ref(`pedidos/${pedidoId}`).once("value");
+    const pedido = pedidoSnapshot.val();
+
+    if (!pedido || !pedido.entregue) {
+      console.warn(
+        "(NOBRIDGE) WARN Pedido não encontrado ou não entregue:",
+        pedidoId
+      );
+      return;
+    }
+
+    const itens = pedido.itens || [];
+    for (const item of itens) {
+      const { nome, quantidade } = item;
+
+      if (COMBOS_SUBITENS[nome]) {
+        console.log("(NOBRIDGE) LOG Revertendo estoque para combo:", nome);
+        const subItens = COMBOS_SUBITENS[nome];
+        for (const subItem of subItens) {
+          const { nome: subItemNome, quantidade: subItemQuantidade } = subItem;
+          const quantidadeTotal = subItemQuantidade * (quantidade || 1);
+
+          const estoqueSnapshot = await db
+            .ref(`estoque/${subItemNome}`)
+            .once("value");
+          const estoqueData = estoqueSnapshot.val();
+
+          const quantidadeAtual = estoqueData ? estoqueData.quantidade || 0 : 0;
+          const novaQuantidade = quantidadeAtual + quantidadeTotal;
+
+          await db
+            .ref(`estoque/${subItemNome}`)
+            .update({ quantidade: novaQuantidade });
+          console.log("(NOBRIDGE) LOG Estoque revertido para subitem:", {
+            nome: subItemNome,
+            novaQuantidade,
+          });
+        }
+      } else {
+        console.log("(NOBRIDGE) LOG Revertendo estoque para item:", {
+          nome,
+          quantidade,
+        });
+
+        const estoqueSnapshot = await db.ref(`estoque/${nome}`).once("value");
+        const estoqueData = estoqueSnapshot.val();
+
+        const quantidadeAtual = estoqueData ? estoqueData.quantidade || 0 : 0;
+        const novaQuantidade = quantidadeAtual + quantidade;
+
+        await db.ref(`estoque/${nome}`).update({ quantidade: novaQuantidade });
+        console.log("(NOBRIDGE) LOG Estoque revertido:", {
+          nome,
+          novaQuantidade,
+        });
+      }
+    }
+
+    // Remove o pedido após reverter o estoque
+    await db.ref(`pedidos/${pedidoId}`).remove();
+    console.log("(NOBRIDGE) LOG Pedido removido após reversão:", pedidoId);
+  } catch (error) {
+    console.error(
+      "(NOBRIDGE) ERROR Erro ao reverter estoque do pedido:",
+      error
+    );
+    throw error;
+  }
+};
+
 export const adicionarNovoItemCardapio = async (
   nome,
   precoUnitario,
