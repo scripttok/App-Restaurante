@@ -336,7 +336,6 @@ export const salvarHistoricoPedido = async (dadosPedido) => {
       totalSemDesconto: dadosPedido.totalSemDesconto,
       desconto: dadosPedido.desconto,
       total: dadosPedido.total,
-      pago: dadosPedido.pago,
       recebido: dadosPedido.recebido,
       troco: dadosPedido.troco,
       dataFechamento: firebase.database.ServerValue.TIMESTAMP,

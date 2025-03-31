@@ -31,9 +31,9 @@ export default function FecharComandaModal({
   const [valorRecebido, setValorRecebido] = useState("");
   const [divisao, setDivisao] = useState("1");
   const [telefoneCliente, setTelefoneCliente] = useState("");
-  const [desconto, setDesconto] = useState(""); // Novo estado para o desconto
+  const [desconto, setDesconto] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [metodoPagamento, setMetodoPagamento] = useState("dinheiro"); // ou o método padrão
+  const [metodoPagamento, setMetodoPagamento] = useState("dinheiro");
 
   useEffect(() => {
     return () => {
@@ -75,7 +75,7 @@ export default function FecharComandaModal({
   };
 
   const calcularDivisao = () => {
-    const restante = parseFloat(calcularRestante()); // Usa o valor restante em vez do total
+    const restante = parseFloat(calcularRestante());
     const numDivisao = parseInt(divisao) || 1;
     return (restante / numDivisao).toFixed(2);
   };
@@ -161,8 +161,6 @@ export default function FecharComandaModal({
     const totalSemDesconto = parseFloat(calcularTotalSemDesconto());
     const descontoNum = parseFloat(desconto) || 0;
 
-    // Validações (mantenha as existentes)
-
     setIsSubmitting(true);
 
     try {
@@ -179,10 +177,10 @@ export default function FecharComandaModal({
       // Criar histórico de pagamentos
       const historicoPagamentos = mesa.historicoPagamentos || [];
 
-      // Adicionar o novo pagamento ao histórico
-      if (recebido > 0) {
+      // Adicionar o novo pagamento ao histórico usando pagoNovo, não recebido
+      if (pagoNovo > 0) {
         historicoPagamentos.push({
-          valor: recebido, // Usa o valor recebido diretamente
+          valor: pagoNovo, // Usa o valor pago, não o recebido
           metodo: metodoPagamento,
           data: dataFechamento,
         });
@@ -196,7 +194,7 @@ export default function FecharComandaModal({
         totalSemDesconto,
         desconto: descontoNum,
         total: totalComDesconto,
-        recebido, // Mantém para referência
+        recebido,
         troco,
         dataFechamento,
         historicoPagamentos,
@@ -204,7 +202,6 @@ export default function FecharComandaModal({
 
       console.log("Dados completos para histórico:", dadosParaHistorico);
 
-      // Restante do seu código permanece igual...
       await salvarHistoricoPedido(dadosParaHistorico);
       await removerPedidosDaMesa(mesa.numero);
 
@@ -215,7 +212,7 @@ export default function FecharComandaModal({
         troco,
         desconto: descontoNum,
         status: "fechada",
-        historicoPagamentos, // Atualizando também na mesa
+        historicoPagamentos,
       });
 
       onAtualizarMesa({
@@ -274,13 +271,24 @@ export default function FecharComandaModal({
       const troco =
         recebido > pagoNovo ? (recebido - pagoNovo).toFixed(2) : "0.00";
 
+      // Criar ou atualizar histórico de pagamentos para pagamento parcial
+      const historicoPagamentos = mesa.historicoPagamentos || [];
+      if (pagoNovo > 0) {
+        historicoPagamentos.push({
+          valor: pagoNovo, // Usa o valor pago, não o recebido
+          metodo: metodoPagamento,
+          data: new Date().toISOString(),
+        });
+      }
+
       const updates = {
         valorPago: pagoTotal,
         valorRestante: restante,
         valorRecebido: recebido,
         troco,
-        desconto: descontoNum, // Inclui o desconto nos dados salvos
+        desconto: descontoNum,
         status: "aberta",
+        historicoPagamentos, // Atualiza o histórico na mesa
       };
 
       console.log(
@@ -308,7 +316,7 @@ export default function FecharComandaModal({
       );
       setValorPago("");
       setValorRecebido("");
-      setDesconto(""); // Limpa o campo de desconto
+      setDesconto("");
     } catch (error) {
       Alert.alert(
         "Erro",

@@ -242,31 +242,25 @@ export default function HistoricoPedidosScreen() {
                       <Text
                         style={[styles.detalheLabel, styles.totalPagoLabel]}
                       >
-                        Total pago:
+                        Pago:
                       </Text>
                       <Text
                         style={[styles.detalheValue, styles.totalPagoValue]}
                       >
-                        R$ {pedido.recebido?.toFixed(2) || "0.00"}
+                        R$ {(pedido.recebido || 0).toFixed(2)}
                       </Text>
                     </View>
 
                     {pedido.historicoPagamentos?.length > 0 && (
                       <View style={styles.pagamentosContainer}>
                         <Text style={styles.detalheLabel}>
-                          Detalhe dos pagamentos:
+                          Pagamentos parciais:
                         </Text>
                         {pedido.historicoPagamentos.map((pagamento, index) => (
                           <View key={index} style={styles.pagamentoRow}>
-                            <Text style={styles.pagamentoData}>
-                              {new Date(pagamento.data).toLocaleDateString(
-                                "pt-BR"
-                              )}
-                              :
-                            </Text>
+                            <Text style={styles.pagamentoData}></Text>
                             <Text style={styles.pagamentoValor}>
-                              R$ {pagamento.valor.toFixed(2)} (
-                              {pagamento.metodo})
+                              R$ {pagamento.valor.toFixed(2)}
                             </Text>
                           </View>
                         ))}
