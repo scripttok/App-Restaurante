@@ -7,10 +7,10 @@ export default function AdicionarMesaModal({ visible, onClose, onAdicionar }) {
   const [numeroMesa, setNumeroMesa] = useState("");
 
   const handleAdicionar = () => {
-    if (nomeCliente && numeroMesa) {
-      onAdicionar({ nomeCliente, numeroMesa });
+    if (nomeCliente) {
+      onAdicionar({ nomeCliente });
       setNomeCliente("");
-      setNumeroMesa("");
+      // setNumeroMesa("");
       onClose();
     } else {
       alert("Preencha todos os campos!");
@@ -28,13 +28,13 @@ export default function AdicionarMesaModal({ visible, onClose, onAdicionar }) {
             value={nomeCliente}
             onChangeText={setNomeCliente}
           />
-          <TextInput
+          {/* <TextInput
             style={styles.input}
             placeholder="Número da Mesa"
             value={numeroMesa}
             onChangeText={setNumeroMesa}
             keyboardType="numeric"
-          />
+          /> */}
           <View style={styles.botoes}>
             <Button title="Cancelar" onPress={onClose} color="#ff4444" />
             <Button title="Adicionar" onPress={handleAdicionar} />

@@ -27,7 +27,6 @@ export default function HistoricoPedidosScreen() {
   const carregarHistorico = useCallback(() => {
     setRefreshing(true);
     const unsubscribe = getHistoricoPedidos((data) => {
-      // Verificar se o componente ainda está montado antes de atualizar o estado
       setHistorico(data);
       setLoading(false);
       setRefreshing(false);
@@ -66,7 +65,7 @@ export default function HistoricoPedidosScreen() {
     return () => {
       isMounted = false;
       if (unsubscribe) {
-        unsubscribe(); // Garantir que o listener seja removido
+        unsubscribe();
       }
     };
   }, [carregarHistorico]);
@@ -96,7 +95,6 @@ export default function HistoricoPedidosScreen() {
   };
 
   const calcularValorDevendo = (pedido) => {
-    // Soma TODOS os pagamentos (parciais + final)
     const totalPagoParcias =
       pedido.historicoPagamentos?.reduce(
         (sum, pagamento) => sum + (parseFloat(pagamento.valor) || 0),
@@ -106,10 +104,7 @@ export default function HistoricoPedidosScreen() {
     const totalPagoFinal = parseFloat(pedido.recebido) || 0;
     const totalPagoTotal = totalPagoParcias + totalPagoFinal;
 
-    // Considera quitado se o total pago for igual ou maior que o valor do pedido
     const diferenca = pedido.total - totalPagoTotal;
-
-    // Se a diferença for menor que 1 centavo, considera quitado
     return Math.abs(diferenca) < 0.01 ? 0 : Math.max(0, diferenca);
   };
 
@@ -196,16 +191,12 @@ export default function HistoricoPedidosScreen() {
           ) : (
             filtrarHistorico().map((pedido) => {
               const valorDevendo = calcularValorDevendo(pedido);
-
               const comandaQuitada = valorDevendo <= 0;
 
               return (
                 <View key={pedido.id} style={styles.pedidoCard}>
                   <View style={styles.headerCard}>
-                    <Text style={styles.pedidoTitle}>Mesa {pedido.numero}</Text>
-                    <Text style={styles.pedidoCliente}>
-                      {pedido.nomeCliente}
-                    </Text>
+                    <Text style={styles.pedidoTitle}>{pedido.nomeCliente}</Text>
                   </View>
 
                   <View style={styles.detalhesContainer}>
@@ -463,7 +454,6 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontStyle: "italic",
   },
-
   secaoTotais: {
     backgroundColor: "#f9f9f9",
     borderRadius: 8,
@@ -488,7 +478,7 @@ const styles = StyleSheet.create({
   },
   totalPagoLabel: {
     fontWeight: "600",
-    color: "#27AE60", // Verde para valores positivos
+    color: "#27AE60",
   },
   totalPagoValue: {
     fontWeight: "bold",

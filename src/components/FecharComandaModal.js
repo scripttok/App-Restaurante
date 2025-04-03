@@ -119,8 +119,7 @@ export default function FecharComandaModal({
       };
     });
     return {
-      numero: mesa?.numero || "N/A",
-      nomeCliente: mesa?.nomeCliente || "N/A",
+      nomeCliente: mesa?.nomeCliente || "N/A", // Removido numero
       itens,
       totalSemDesconto: calcularTotalSemDesconto(),
       desconto: parseFloat(desconto) || 0,
@@ -133,10 +132,10 @@ export default function FecharComandaModal({
   const salvarPedidoNoHistorico = async (dadosPedido) => {
     try {
       const dataAtual = new Date().toISOString();
-      const nomeArquivo = `pedido_mesa_${mesa.numero}_${dataAtual.replace(
+      const nomeArquivo = `pedido_mesa_${mesa.id}_${dataAtual.replace(
         /[:.]/g,
         "-"
-      )}.json`;
+      )}.json`; // Usar id em vez de numero
       const caminhoArquivo = `${FileSystem.documentDirectory}${nomeArquivo}`;
 
       await FileSystem.writeAsStringAsync(
@@ -171,25 +170,19 @@ export default function FecharComandaModal({
       const troco = calcularTroco();
       const pagoTotal = pagoAnterior + pagoNovo;
 
-      // Obter a data atual
       const dataFechamento = new Date().toISOString();
-
-      // Criar histórico de pagamentos
       const historicoPagamentos = mesa.historicoPagamentos || [];
 
-      // Adicionar o novo pagamento ao histórico usando pagoNovo, não recebido
       if (pagoNovo > 0) {
         historicoPagamentos.push({
-          valor: pagoNovo, // Usa o valor pago, não o recebido
+          valor: pagoNovo,
           metodo: metodoPagamento,
           data: dataFechamento,
         });
       }
 
-      // Preparar dados para o histórico
       const dadosParaHistorico = {
-        numero: mesa.numero,
-        nomeCliente: mesa.nomeCliente,
+        nomeCliente: mesa.nomeCliente, // Removido numero
         itens: getResumoConta().itens,
         totalSemDesconto,
         desconto: descontoNum,
@@ -203,7 +196,7 @@ export default function FecharComandaModal({
       console.log("Dados completos para histórico:", dadosParaHistorico);
 
       await salvarHistoricoPedido(dadosParaHistorico);
-      await removerPedidosDaMesa(mesa.numero);
+      await removerPedidosDaMesa(mesa.id); // Usar id em vez de numero
 
       await fecharMesa(mesa.id, {
         valorPago: pagoTotal,
@@ -271,11 +264,10 @@ export default function FecharComandaModal({
       const troco =
         recebido > pagoNovo ? (recebido - pagoNovo).toFixed(2) : "0.00";
 
-      // Criar ou atualizar histórico de pagamentos para pagamento parcial
       const historicoPagamentos = mesa.historicoPagamentos || [];
       if (pagoNovo > 0) {
         historicoPagamentos.push({
-          valor: pagoNovo, // Usa o valor pago, não o recebido
+          valor: pagoNovo,
           metodo: metodoPagamento,
           data: new Date().toISOString(),
         });
@@ -288,7 +280,7 @@ export default function FecharComandaModal({
         troco,
         desconto: descontoNum,
         status: "aberta",
-        historicoPagamentos, // Atualiza o histórico na mesa
+        historicoPagamentos,
       };
 
       console.log(
@@ -296,10 +288,6 @@ export default function FecharComandaModal({
         updates
       );
       await fecharMesa(mesa.id, updates);
-      console.log(
-        "Após fecharMesa, atualização enviada para mesaAtual:",
-        updates
-      );
 
       Alert.alert(
         "Sucesso",
@@ -311,9 +299,6 @@ export default function FecharComandaModal({
         ...mesa,
         ...updates,
       });
-      console.log(
-        "Pagamento parcial registrado, status mantido como 'aberta', mesaAtual atualizada"
-      );
       setValorPago("");
       setValorRecebido("");
       setDesconto("");
@@ -369,7 +354,7 @@ export default function FecharComandaModal({
     setIsSubmitting(true);
     try {
       const whatsappUrl = enviarComandaViaWhatsApp(
-        mesa.numero,
+        mesa.id, // Usar id em vez de numero
         pedidos,
         cardapio,
         numeroLimpo
@@ -415,7 +400,7 @@ export default function FecharComandaModal({
         <View style={styles.modalContent}>
           <ScrollView contentContainerStyle={styles.scrollContent}>
             <Text style={styles.titulo}>
-              Fechar Comanda - Mesa {mesa?.numero}
+              Fechar Comanda - {mesa?.nomeCliente || "Cliente"}
             </Text>
             <Text style={styles.totalGeral}>
               Total R$ {calcularTotalSemDesconto()}

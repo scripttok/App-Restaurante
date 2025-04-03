@@ -31,7 +31,6 @@ export default function DetalhesMesaModal({
   const [mesaAtual, setMesaAtual] = useState(mesa || {});
   const [pedidosLocais, setPedidosLocais] = useState(pedidos || []);
 
-  // Função para buscar os dados mais recentes da mesa do Firebase
   const fetchMesaAtual = async () => {
     if (!mesa?.id) return;
     try {
@@ -56,10 +55,8 @@ export default function DetalhesMesaModal({
       const pedido = pedidoSnapshot.val();
 
       if (pedido.entregue) {
-        // Se o pedido foi entregue, reverte o estoque
         await reverterEstoquePedido(pedidoId);
       } else {
-        // Se não foi entregue, apenas remove
         await pedidoRef.remove();
         console.log("(NOBRIDGE) LOG Pedido removido do Firebase:", pedidoId);
       }
@@ -128,7 +125,7 @@ export default function DetalhesMesaModal({
         message: error.message,
         stack: error.stack,
       });
-      Alert.alert("Erro", error.message); // Mostra o erro específico ao usuário
+      Alert.alert("Erro", error.message);
     }
   };
 
@@ -203,8 +200,7 @@ export default function DetalhesMesaModal({
       <View style={styles.modalContainer}>
         <View style={styles.modalContent}>
           <Text style={styles.titulo}>
-            Mesa {mesaAtual?.numero || "N/A"} -{" "}
-            {mesaAtual?.nomeCliente || "Sem cliente"}
+            Mesa de {mesaAtual?.nomeCliente || "Sem cliente"}
           </Text>
           <FlatList
             data={pedidosLocais}
@@ -249,7 +245,7 @@ export default function DetalhesMesaModal({
         visible={adicionarItensVisible}
         onClose={() => setAdicionarItensVisible(false)}
         onConfirm={(itens) => {
-          onAdicionarPedido(mesaAtual.numero, itens);
+          onAdicionarPedido(mesaAtual.id, itens); // Usar id em vez de numero
           setAdicionarItensVisible(false);
         }}
         mesa={mesaAtual}

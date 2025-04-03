@@ -136,7 +136,7 @@ export default function AdicionarItensModal({
       onClose();
       setItensSelecionados([]);
     } catch (error) {
-      Alert.alert("Erro", error.message); // Mostra o erro ao adicionar os itens
+      Alert.alert("Erro", error.message);
     }
   };
 
@@ -241,12 +241,12 @@ export default function AdicionarItensModal({
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <Text style={styles.titulo}>
-              Adicionar Itens à Mesa {mesa?.numero}
+              Adicionar Itens para {mesa?.nomeCliente || "Cliente"}
             </Text>
             <FlatList
               data={categorias}
               renderItem={renderCategoria}
-              keyExtractor={(item) => `cat-${item}`} // Chave única para categorias
+              keyExtractor={(item) => `cat-${item}`}
               style={styles.flatList}
               contentContainerStyle={styles.flatListContent}
               ListEmptyComponent={
@@ -280,7 +280,7 @@ export default function AdicionarItensModal({
               renderItem={renderItem}
               keyExtractor={(item, index) =>
                 `${item.categoria}-${item.nome}-${index}`
-              } // Chave única para itens
+              }
               style={styles.flatList}
               contentContainerStyle={styles.flatListContent}
               ListEmptyComponent={

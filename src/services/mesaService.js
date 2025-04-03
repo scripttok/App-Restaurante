@@ -165,25 +165,22 @@ export const juntarMesas = async (mesaId1, mesaId2) => {
       throw new Error("Uma ou ambas as mesas não foram encontradas.");
     }
 
-    // Validação do status das mesas
     if (mesa1.status === "fechada" || mesa2.status === "fechada") {
       throw new Error("Não é possível juntar uma mesa com status 'fechada'.");
     }
 
-    const novoNumero = `${mesa1.numero}-${mesa2.numero}`;
     const novoNomeCliente = `${mesa1.nomeCliente} & ${mesa2.nomeCliente}`;
 
     const pedidosSnapshot = await freshDb.ref("pedidos").once("value");
     const todosPedidos = pedidosSnapshot.val() || {};
     const pedidosMesa1 = Object.entries(todosPedidos)
-      .filter(([_, pedido]) => pedido.mesa === mesa1.numero)
-      .map(([id, pedido]) => ({ id, ...pedido, mesaOriginal: mesa1.numero }));
+      .filter(([_, pedido]) => pedido.mesa === mesaId1)
+      .map(([id, pedido]) => ({ id, ...pedido, mesaOriginal: mesaId1 }));
     const pedidosMesa2 = Object.entries(todosPedidos)
-      .filter(([_, pedido]) => pedido.mesa === mesa2.numero)
-      .map(([id, pedido]) => ({ id, ...pedido, mesaOriginal: mesa2.numero }));
+      .filter(([_, pedido]) => pedido.mesa === mesaId2)
+      .map(([id, pedido]) => ({ id, ...pedido, mesaOriginal: mesaId2 }));
 
     const novaMesa = {
-      numero: novoNumero,
       nomeCliente: novoNomeCliente,
       posX: mesa1.posX || 0,
       posY: mesa1.posY || 0,
@@ -193,7 +190,7 @@ export const juntarMesas = async (mesaId1, mesaId2) => {
 
     const updates = {};
     [...pedidosMesa1, ...pedidosMesa2].forEach((pedido) => {
-      updates[`pedidos/${pedido.id}/mesa`] = novoNumero;
+      updates[`pedidos/${pedido.id}/mesa`] = mesaId1; // Mantém pedidos na mesa1
       if (!pedido.mesaOriginal) {
         updates[`pedidos/${pedido.id}/mesaOriginal`] = pedido.mesa;
       }
@@ -204,7 +201,7 @@ export const juntarMesas = async (mesaId1, mesaId2) => {
     await freshDb.ref().update(updates);
     console.log(
       "(NOBRIDGE) LOG Mesas juntadas com sucesso:",
-      novoNumero,
+      novoNomeCliente,
       "Pedidos combinados:",
       [...pedidosMesa1, ...pedidosMesa2]
     );
@@ -214,12 +211,12 @@ export const juntarMesas = async (mesaId1, mesaId2) => {
   }
 };
 
-export const adicionarPedido = async (mesaNumero, itens) => {
+export const adicionarPedido = async (mesaId, itens) => {
   const freshDb = await ensureFirebaseInitialized();
   await waitForConnection(freshDb);
   try {
     const pedido = {
-      mesa: mesaNumero,
+      mesa: mesaId,
       itens,
       status: "aguardando",
       entregue: false,
@@ -331,9 +328,7 @@ export const salvarHistoricoPedido = async (dadosPedido) => {
   try {
     const historicoRef = freshDb.ref("historicoPedidos");
 
-    // Preparar o objeto para salvar
     const novoHistorico = {
-      numero: dadosPedido.numero,
       nomeCliente: dadosPedido.nomeCliente,
       itens: Array.isArray(dadosPedido.itens)
         ? dadosPedido.itens
@@ -344,20 +339,18 @@ export const salvarHistoricoPedido = async (dadosPedido) => {
       recebido: dadosPedido.recebido,
       troco: dadosPedido.troco,
       dataFechamento: firebase.database.ServerValue.TIMESTAMP,
-      // Garantir que historicoPagamentos seja um array válido
       historicoPagamentos: Array.isArray(dadosPedido.historicoPagamentos)
         ? dadosPedido.historicoPagamentos
         : [],
     };
 
-    // Se houver pagamento atual mas não estiver no histórico, adicionamos
     if (
       dadosPedido.pago > 0 &&
       novoHistorico.historicoPagamentos.length === 0
     ) {
       novoHistorico.historicoPagamentos.push({
         valor: dadosPedido.pago,
-        metodo: dadosPedido.metodoPagamento || "dinheiro", // Valor padrão
+        metodo: dadosPedido.metodoPagamento || "dinheiro",
         data: new Date().toISOString(),
       });
     }
@@ -385,7 +378,6 @@ export const getHistoricoPedidos = (callback) => {
       const freshDb = await ensureFirebaseInitialized();
       ref = freshDb.ref("historicoPedidos");
 
-      // Ordena por data decrescente e limita a 100 itens
       ref
         .orderByChild("dataFechamento")
         .limitToLast(100)
@@ -401,8 +393,6 @@ export const getHistoricoPedidos = (callback) => {
                   ? new Date(value.dataFechamento).toISOString()
                   : "",
               }));
-
-              // Ordena do mais recente para o mais antigo
               historico.sort((a, b) =>
                 b.dataFechamento.localeCompare(a.dataFechamento)
               );
@@ -646,7 +636,7 @@ export const validarEstoqueParaPedido = async (itens) => {
         }
       }
     }
-    return true; // Estoque validado com sucesso
+    return true;
   } catch (error) {
     console.error("(NOBRIDGE) ERROR Erro ao validar estoque:", error);
     throw error;
@@ -796,7 +786,6 @@ export const reverterEstoquePedido = async (pedidoId) => {
       }
     }
 
-    // Remove o pedido após reverter o estoque
     await db.ref(`pedidos/${pedidoId}`).remove();
     console.log("(NOBRIDGE) LOG Pedido removido após reversão:", pedidoId);
   } catch (error) {
@@ -978,21 +967,27 @@ export const fecharMesa = async (mesaId, updates) => {
 };
 
 export const enviarComandaViaWhatsApp = (
-  mesaNumero,
+  mesaId,
   pedidos,
   cardapio,
   telefone
 ) => {
   try {
     console.log("(NOBRIDGE) LOG Gerando texto da comanda para WhatsApp:", {
-      mesaNumero,
+      mesaId,
       pedidos,
       cardapio,
       telefone,
     });
 
-    // Gera o texto da comanda
-    let texto = `Conta da Mesa ${mesaNumero}\nItens:\n`;
+    const mesaSnapshot = firebase
+      .database()
+      .ref(`mesas/${mesaId}`)
+      .once("value");
+    const mesa = mesaSnapshot.val();
+    const nomeMesa = mesa ? mesa.nomeCliente : `Mesa ${mesaId}`;
+
+    let texto = `Conta da ${nomeMesa}\nItens:\n`;
     pedidos.forEach((pedido) => {
       if (pedido.itens && Array.isArray(pedido.itens)) {
         pedido.itens.forEach((item) => {
@@ -1023,13 +1018,12 @@ export const enviarComandaViaWhatsApp = (
 
     console.log("(NOBRIDGE) LOG Texto da comanda gerado com sucesso:", texto);
 
-    // Formata o número de telefone e cria a URL do WhatsApp
-    const numeroLimpo = telefone.replace(/[^\d+]/g, ""); // Remove caracteres indesejados
+    const numeroLimpo = telefone.replace(/[^\d+]/g, "");
     const encodedText = encodeURIComponent(texto);
     const whatsappUrl = `whatsapp://send?phone=${numeroLimpo}&text=${encodedText}`;
 
     console.log("(NOBRIDGE) LOG URL do WhatsApp gerada:", whatsappUrl);
-    return whatsappUrl; // Retorna a URL completa
+    return whatsappUrl;
   } catch (error) {
     console.error(
       "(NOBRIDGE) ERROR Erro ao gerar texto da comanda para WhatsApp:",
@@ -1069,31 +1063,31 @@ export const removerMesa = async (mesaId) => {
   }
 };
 
-export const removerPedidosDaMesa = async (mesaNumero) => {
+export const removerPedidosDaMesa = async (mesaId) => {
   const freshDb = await ensureFirebaseInitialized();
   try {
-    console.log("(NOBRIDGE) LOG Removendo pedidos da mesa:", mesaNumero);
+    console.log("(NOBRIDGE) LOG Removendo pedidos da mesa:", mesaId);
     const pedidosSnapshot = await freshDb.ref("pedidos").once("value");
     const todosPedidos = pedidosSnapshot.val() || {};
     const pedidosDaMesa = Object.entries(todosPedidos)
-      .filter(([_, pedido]) => pedido.mesa === mesaNumero)
+      .filter(([_, pedido]) => pedido.mesa === mesaId)
       .map(([id]) => id);
 
     const updates = {};
     pedidosDaMesa.forEach((pedidoId) => {
-      updates[`pedidos/${pedidoId}`] = null; // Remove cada pedido
+      updates[`pedidos/${pedidoId}`] = null;
     });
 
     if (Object.keys(updates).length > 0) {
       await freshDb.ref().update(updates);
       console.log(
         "(NOBRIDGE) LOG Pedidos removidos com sucesso da mesa:",
-        mesaNumero
+        mesaId
       );
     } else {
       console.log(
         "(NOBRIDGE) LOG Nenhum pedido encontrado para a mesa:",
-        mesaNumero
+        mesaId
       );
     }
   } catch (error) {

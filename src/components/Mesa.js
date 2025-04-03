@@ -78,7 +78,6 @@ export default function Mesa({ mesa, pedidos, onMove, onDrop, onVerPedidos }) {
             },
           ]}
         >
-          <Text style={styles.numero}>Mesa {mesa.numero || "N/A"}</Text>
           <Text style={styles.nome}>{mesa.nomeCliente || "Sem cliente"}</Text>
         </Animated.View>
       </PanGestureHandler>
@@ -95,13 +94,12 @@ const styles = StyleSheet.create({
     width: 110,
     height: 90,
     backgroundColor: "#FFA500",
-    borderColor: "white", // Corrigido: camelCase e com aspas
+    borderColor: "white",
     borderWidth: 2,
     borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
   },
-  numero: { fontSize: 2, fontWeight: "bold" },
   nome: { fontSize: 18 },
   novoPedido: { borderWidth: 2, borderColor: "#ff4444" },
   botao: { marginTop: 5, padding: 5, borderRadius: 5 },
