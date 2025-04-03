@@ -36,7 +36,6 @@ export default function GerenciarEstoqueCardapioModal({ visible, onClose }) {
     "Combos",
     "Docês",
   ];
-
   const handleAdicionarEstoqueECardapio = async () => {
     if (!nomeEstoque || !quantidadeEstoque || !precoUnitario || !categoria) {
       Alert.alert(
@@ -58,18 +57,19 @@ export default function GerenciarEstoqueCardapioModal({ visible, onClose }) {
         quantidadeEstoque,
         precoUnitario,
         categoria,
-        descricao, // Adiciona a descrição ao log para verificação
+        descricao,
       });
 
-      const chaveUnica = `${categoria.slice(0, 3)}${Date.now()}`; // Ex.: "Lan123456789"
+      const chaveUnica = `${categoria.slice(0, 3)}${Date.now()}`;
 
-      // Adicionar ao estoque com categoria
+      // Adicionar ao estoque com categoria e preço
       const db = await ensureFirebaseInitialized();
       const itemEstoque = {
         nome: nomeLimpo,
         quantidade: parseInt(quantidadeEstoque, 10),
         unidade: unidadeEstoque || "unidades",
         estoqueMinimo: parseInt(estoqueMinimo, 10) || 0,
+        precoUnitario: parseFloat(precoUnitario), // Adiciona o preço aqui!
         chaveCardapio: chaveUnica,
         categoria: categoria,
       };
@@ -80,10 +80,10 @@ export default function GerenciarEstoqueCardapioModal({ visible, onClose }) {
       await adicionarNovoItemCardapio(
         nomeLimpo,
         precoUnitario,
-        "", // imagemUrl
+        "",
         categoria,
         chaveUnica,
-        descricao // Passa o valor do estado descricao
+        descricao
       );
       console.log("(NOBRIDGE) LOG Cardápio adicionado com sucesso");
 
@@ -98,7 +98,7 @@ export default function GerenciarEstoqueCardapioModal({ visible, onClose }) {
       setEstoqueMinimo("");
       setPrecoUnitario("");
       setCategoria("");
-      setDescricao(""); // Limpa o campo descrição após sucesso
+      setDescricao("");
     } catch (error) {
       console.error("(NOBRIDGE) ERROR Erro no processo de adição:", error);
       Alert.alert("Erro", "Não foi possível adicionar: " + error.message);
