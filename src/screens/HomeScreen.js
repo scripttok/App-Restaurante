@@ -62,18 +62,22 @@ export default function HomeScreen() {
     if (route.params?.adicionarMesa) {
       setModalVisible(true);
       navigation.setParams({ adicionarMesa: false });
+      console.log("route.params:", route.params);
     }
     if (route.params?.controleEstoque) {
       setEstoqueVisible(true);
       navigation.setParams({ controleEstoque: false });
+      console.log("route.params:", route.params);
     }
     if (route.params?.gerenciarEstoque) {
       setGerenciarVisible(true);
       navigation.setParams({ gerenciarEstoque: false });
+      console.log("route.params:", route.params);
     }
     if (route.params?.gerenciarFichas) {
       setFichasTecnicasVisible(true);
       navigation.setParams({ gerenciarFichas: false });
+      console.log("route.params:", route.params);
     }
   }, [route.params, navigation]);
 
@@ -162,6 +166,7 @@ export default function HomeScreen() {
       posY: 0,
       status: "aberta",
     };
+    console.log("novaMesa:", novaMesa);
     try {
       await adicionarMesaNoFirebase(novaMesa);
       setModalVisible(false);

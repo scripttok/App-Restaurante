@@ -77,7 +77,7 @@ function DrawerContent({ navigation }) {
           color="#FFA500"
         />
       </View>
-      <View style={{ marginVertical: 10 }}>
+      {/* <View style={{ marginVertical: 10 }}>
         <Button
           title="Gerenciar Fichas Técnicas"
           onPress={() =>
@@ -88,7 +88,7 @@ function DrawerContent({ navigation }) {
           }
           color="#FFA500"
         />
-      </View>
+      </View> */}
       <View style={{ marginVertical: 10 }}>
         <Button
           title="Histórico"
