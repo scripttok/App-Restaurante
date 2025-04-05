@@ -4,7 +4,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import HomeScreen from "./src/screens/HomeScreen";
-import HistoricoPedidosScreen from "./src/screens/HistoricoPedidosScreen";
+// import HistoricoPedidosScreen from "./src/screens/HistoricoPedidosScreen";
 
 const Stack = createStackNavigator();
 
@@ -19,11 +19,11 @@ export default function App() {
               component={HomeScreen}
               options={{ headerShown: false }}
             />
-            <Stack.Screen
+            {/* <Stack.Screen
               name="HistoricoPedidos"
               component={HistoricoPedidosScreen}
               options={{ title: "Histórico de Pedidos" }}
-            />
+            /> */}
           </Stack.Navigator>
           <StatusBar style="auto" />
         </View>
