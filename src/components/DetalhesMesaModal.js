@@ -5,7 +5,6 @@ import {
   Text,
   FlatList,
   StyleSheet,
-  Button,
   Alert,
   TouchableOpacity,
 } from "react-native";
@@ -27,7 +26,6 @@ export default function DetalhesMesaModal({
   const [mesaAtual, setMesaAtual] = useState(mesa || {});
   const [pedidosLocais, setPedidosLocais] = useState(pedidos || []);
 
-  // Função para buscar os dados mais recentes da mesa do Firebase
   const fetchMesaAtual = async () => {
     if (!mesa?.id) return;
     try {
@@ -48,10 +46,54 @@ export default function DetalhesMesaModal({
     try {
       const freshDb = await ensureFirebaseInitialized();
       const pedidoRef = freshDb.ref(`pedidos/${pedidoId}`);
+      const estoqueRef = freshDb.ref("estoque");
 
+      // Buscar os dados do pedido antes de removê-lo
+      const pedidoSnapshot = await pedidoRef.once("value");
+      const pedido = pedidoSnapshot.val();
+
+      if (!pedido) {
+        throw new Error("Pedido não encontrado no Firebase.");
+      }
+
+      console.log("(NOBRIDGE) LOG Pedido a ser removido:", pedido);
+
+      // Atualizar o estoque
+      const updates = {};
+      const itens = pedido.itens || [];
+      for (const item of itens) {
+        const itemEstoqueRef = estoqueRef.child(item.nome);
+        const estoqueSnapshot = await itemEstoqueRef.once("value");
+        const estoqueAtual = estoqueSnapshot.val();
+
+        if (estoqueAtual) {
+          const novaQuantidade =
+            (estoqueAtual.quantidade || 0) + (item.quantidade || 0);
+          updates[`estoque/${item.nome}/quantidade`] = novaQuantidade;
+          console.log("(NOBRIDGE) LOG Atualizando estoque:", {
+            item: item.nome,
+            quantidadeDevolvida: item.quantidade,
+            novaQuantidade,
+          });
+        } else {
+          console.warn(
+            "(NOBRIDGE) WARN Item não encontrado no estoque:",
+            item.nome
+          );
+        }
+      }
+
+      // Aplicar as atualizações no estoque
+      if (Object.keys(updates).length > 0) {
+        await freshDb.ref().update(updates);
+        console.log("(NOBRIDGE) LOG Estoque atualizado com sucesso");
+      }
+
+      // Remover o pedido do Firebase
       await pedidoRef.remove();
       console.log("(NOBRIDGE) LOG Pedido removido do Firebase:", pedidoId);
 
+      // Atualizar o estado local
       const novosPedidos = pedidosLocais.filter(
         (pedido) => pedido.id !== pedidoId
       );
@@ -105,7 +147,6 @@ export default function DetalhesMesaModal({
         status: !entregueAtual,
       });
 
-      // Atualizar pedidos locais após a mudança
       const novosPedidos = pedidosLocais.map((pedido) =>
         pedido.id === pedidoId
           ? { ...pedido, entregue: !entregueAtual }
@@ -179,13 +220,11 @@ export default function DetalhesMesaModal({
           color={item.entregue ? "#ff4444" : "#4CAF50"}
           disabled={item.entregue}
         />
-        {!item.entregue && (
-          <CustomButton
-            title="X"
-            onPress={() => handleRemoverItem(item.id)}
-            color="#ff4444"
-          />
-        )}
+        <CustomButton
+          title="X"
+          onPress={() => handleRemoverItem(item.id)}
+          color="#ff4444"
+        />
       </View>
     </View>
   );
@@ -196,7 +235,6 @@ export default function DetalhesMesaModal({
         <View style={styles.modalContent}>
           <Text style={styles.titulo}>
             Mesa {mesaAtual?.numeroMesa || "N/A"} -{" "}
-            {/* Alterado de numero para numeroMesa */}
             {mesaAtual?.nomeCliente || "Sem cliente"}
           </Text>
           <FlatList
@@ -242,7 +280,7 @@ export default function DetalhesMesaModal({
         visible={adicionarItensVisible}
         onClose={() => setAdicionarItensVisible(false)}
         onConfirm={(itens) => {
-          onAdicionarPedido(mesaAtual.numeroMesa, itens); // Alterado de mesaAtual.numero para mesaAtual.numeroMesa
+          onAdicionarPedido(mesaAtual.numeroMesa, itens);
           setAdicionarItensVisible(false);
         }}
         mesa={mesaAtual}
