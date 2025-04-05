@@ -215,31 +215,42 @@ export default function HomeScreen() {
     }
   };
 
+  // HomeScreen.js
   const soltarMesa = (mesaId) => {
     const mesa = mesas.find((m) => m.id === mesaId);
+    console.log("(NOBRIDGE) LOG Mesa encontrada:", mesa);
     if (!mesaSelecionada) {
       setMesaSelecionada(mesaId);
-      const isJuntada = mesa && String(mesa.numeroMesa).includes("-"); // Ajustado para numeroMesa
+      const isJuntada = mesa && String(mesa.numeroMesa).includes("-");
+      console.log(
+        "(NOBRIDGE) LOG isJuntada:",
+        isJuntada,
+        "numeroMesa:",
+        mesa?.numeroMesa
+      );
+
+      const opcoes = [
+        { text: "Cancelar", onPress: () => setMesaSelecionada(null) },
+      ];
+      if (isJuntada) {
+        opcoes.push({ text: "Separar", onPress: () => separarMesas(mesaId) });
+      }
+      opcoes.push({
+        text: "Remover",
+        onPress: async () => {
+          await removerMesaLocal(mesaId);
+          setMesaSelecionada(null);
+        },
+        style: "destructive",
+      });
+      opcoes.push({ text: "Ok" });
+
       Alert.alert(
         "Mesa Selecionada",
         isJuntada
           ? 'Escolha "Separar", "Remover" ou junte com outra mesa.'
           : "Solte outra mesa para juntar ou escolha 'Remover'.",
-        [
-          { text: "Cancelar", onPress: () => setMesaSelecionada(null) },
-          ...(isJuntada
-            ? [{ text: "Separar", onPress: () => separarMesas(mesaId) }]
-            : []),
-          {
-            text: "Remover",
-            onPress: async () => {
-              await removerMesaLocal(mesaId);
-              setMesaSelecionada(null);
-            },
-            style: "destructive",
-          },
-          { text: "Ok" },
-        ]
+        opcoes
       );
     } else if (mesaSelecionada !== mesaId) {
       Alert.alert("Juntar Mesas", "Deseja juntar essas mesas?", [

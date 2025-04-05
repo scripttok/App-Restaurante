@@ -71,6 +71,7 @@ export const adicionarMesaNoFirebase = async (mesa) => {
     .push({ ...mesa, createdAt: firebase.database.ServerValue.TIMESTAMP }).key;
 };
 
+// mesaService.js
 export const getMesas = (callback) => {
   let ref;
   const setupListener = async () => {
@@ -90,7 +91,15 @@ export const getMesas = (callback) => {
         console.log("(NOBRIDGE) LOG Mesas recebidas:", data);
         callback(
           data
-            ? Object.entries(data).map(([id, value]) => ({ id, ...value }))
+            ? Object.entries(data).map(([id, value]) => ({
+                id,
+                numeroMesa: value.numeroMesa || value.numero, // Normaliza numero para numeroMesa
+                nomeCliente: value.nomeCliente,
+                posX: value.posX,
+                posY: value.posY,
+                status: value.status,
+                createdAt: value.createdAt,
+              }))
             : []
         );
       },
@@ -176,6 +185,7 @@ export const atualizarMesa = async (mesaId, updates) => {
   }
 };
 
+// mesaService.js
 export const juntarMesas = async (mesaId1, mesaId2) => {
   const freshDb = await ensureFirebaseInitialized();
   await waitForConnection(freshDb);
@@ -192,20 +202,28 @@ export const juntarMesas = async (mesaId1, mesaId2) => {
       throw new Error("Uma ou ambas as mesas não foram encontradas.");
     }
 
-    const novoNumero = `${mesa1.numero}-${mesa2.numero}`;
+    const novoNumero = `${mesa1.numeroMesa}-${mesa2.numeroMesa}`; // Usar numeroMesa
     const novoNomeCliente = `${mesa1.nomeCliente} & ${mesa2.nomeCliente}`;
 
     const pedidosSnapshot = await freshDb.ref("pedidos").once("value");
     const todosPedidos = pedidosSnapshot.val() || {};
     const pedidosMesa1 = Object.entries(todosPedidos)
-      .filter(([_, pedido]) => pedido.mesa === mesa1.numero)
-      .map(([id, pedido]) => ({ id, ...pedido, mesaOriginal: mesa1.numero }));
+      .filter(([_, pedido]) => pedido.mesa === mesa1.numeroMesa)
+      .map(([id, pedido]) => ({
+        id,
+        ...pedido,
+        mesaOriginal: mesa1.numeroMesa,
+      }));
     const pedidosMesa2 = Object.entries(todosPedidos)
-      .filter(([_, pedido]) => pedido.mesa === mesa2.numero)
-      .map(([id, pedido]) => ({ id, ...pedido, mesaOriginal: mesa2.numero }));
+      .filter(([_, pedido]) => pedido.mesa === mesa2.numeroMesa)
+      .map(([id, pedido]) => ({
+        id,
+        ...pedido,
+        mesaOriginal: mesa2.numeroMesa,
+      }));
 
     const novaMesa = {
-      numero: novoNumero,
+      numeroMesa: novoNumero, // Alterado de "numero" para "numeroMesa"
       nomeCliente: novoNomeCliente,
       posX: mesa1.posX || 0,
       posY: mesa1.posY || 0,
@@ -224,12 +242,7 @@ export const juntarMesas = async (mesaId1, mesaId2) => {
     updates[`mesas/${mesaId2}`] = null;
 
     await freshDb.ref().update(updates);
-    console.log(
-      "(NOBRIDGE) LOG Mesas juntadas com sucesso:",
-      novoNumero,
-      "Pedidos combinados:",
-      [...pedidosMesa1, ...pedidosMesa2]
-    );
+    console.log("(NOBRIDGE) LOG Mesas juntadas com sucesso:", novoNumero);
   } catch (error) {
     console.error("(NOBRIDGE) ERROR Erro ao juntar mesas:", error);
     throw error;

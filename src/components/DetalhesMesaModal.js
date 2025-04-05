@@ -195,7 +195,8 @@ export default function DetalhesMesaModal({
       <View style={styles.modalContainer}>
         <View style={styles.modalContent}>
           <Text style={styles.titulo}>
-            Mesa {mesaAtual?.numero || "N/A"} -{" "}
+            Mesa {mesaAtual?.numeroMesa || "N/A"} -{" "}
+            {/* Alterado de numero para numeroMesa */}
             {mesaAtual?.nomeCliente || "Sem cliente"}
           </Text>
           <FlatList
@@ -241,7 +242,7 @@ export default function DetalhesMesaModal({
         visible={adicionarItensVisible}
         onClose={() => setAdicionarItensVisible(false)}
         onConfirm={(itens) => {
-          onAdicionarPedido(mesaAtual.numero, itens);
+          onAdicionarPedido(mesaAtual.numeroMesa, itens); // Alterado de mesaAtual.numero para mesaAtual.numeroMesa
           setAdicionarItensVisible(false);
         }}
         mesa={mesaAtual}
