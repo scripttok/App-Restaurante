@@ -11,7 +11,7 @@ import {
   TextInput,
   Modal,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native"; // Importe aqui
+import { useNavigation } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
@@ -36,7 +36,7 @@ import {
 import { ensureFirebaseInitialized } from "../services/firebase";
 
 export default function HomeScreen() {
-  const navigation = useNavigation(); // Use aqui, no nível do componente
+  const navigation = useNavigation();
   const [searchText, setSearchText] = useState("");
   const [mesas, setMesas] = useState([]);
   const [pedidos, setPedidos] = useState([]);
@@ -67,7 +67,14 @@ export default function HomeScreen() {
 
         unsubscribeMesas = getMesas((data) => {
           console.log("(NOBRIDGE) LOG Mesas recebidas no HomeScreen:", data);
-          setMesas(data);
+          setMesas((prevMesas) => {
+            // Usar um Map para garantir unicidade por ID
+            const mesasMap = new Map();
+            data.forEach((mesa) => mesasMap.set(mesa.id, mesa));
+            const newMesas = Array.from(mesasMap.values());
+            console.log("(NOBRIDGE) LOG Estado atualizado de mesas:", newMesas);
+            return newMesas;
+          });
         });
 
         unsubscribePedidos = getPedidos(async (data) => {
@@ -136,38 +143,48 @@ export default function HomeScreen() {
   }, []);
 
   const adicionarMesa = async ({ nomeCliente, numeroMesa }) => {
-    const mesaNumeroExistente = mesas.find(
-      (mesa) => mesa.numero === numeroMesa
-    );
-    if (mesaNumeroExistente) {
-      Alert.alert("Erro", `Já existe uma mesa com o número "${numeroMesa}".`);
-      return;
-    }
-
-    const mesaNomeExistente = mesas.find(
-      (mesa) => mesa.nomeCliente === nomeCliente
-    );
-    if (mesaNomeExistente) {
-      Alert.alert("Erro", `Já existe uma mesa com o cliente "${nomeCliente}".`);
-      return;
-    }
-
-    const novaMesa = {
-      numero: numeroMesa,
-      nomeCliente,
-      pedidos: [],
-      posX: 0,
-      posY: 0,
-      status: "aberta",
-    };
     try {
+      const freshDb = await ensureFirebaseInitialized();
+      const snapshot = await freshDb.ref("mesas").once("value");
+      const mesasExistentes = snapshot.val() || {};
+
+      const mesaNumeroExistente = Object.values(mesasExistentes).some(
+        (mesa) =>
+          mesa.numeroMesa !== undefined && mesa.numeroMesa === numeroMesa
+      );
+      if (mesaNumeroExistente) {
+        // Alert.alert("Erro", `Já existe uma mesa com o número "${numeroMesa}".`);
+        return;
+      }
+
+      const mesaNomeExistente = Object.values(mesasExistentes).some(
+        (mesa) => mesa.nomeCliente === nomeCliente
+      );
+      if (mesaNomeExistente) {
+        Alert.alert(
+          "Erro",
+          `Já existe uma mesa com o cliente "${nomeCliente}".`
+        );
+        return;
+      }
+
+      const novaMesa = {
+        numeroMesa,
+        nomeCliente,
+        pedidos: [],
+        posX: 0,
+        posY: 0,
+        status: "aberta",
+      };
+      console.log(
+        "(NOBRIDGE) LOG Chamando adicionarMesaNoFirebase com:",
+        novaMesa
+      );
       await adicionarMesaNoFirebase(novaMesa);
       setModalVisible(false);
     } catch (error) {
-      Alert.alert(
-        "Erro",
-        "Não foi possível adicionar a mesa: " + error.message
-      );
+      console.error("(NOBRIDGE) ERROR Erro ao adicionar mesa:", error);
+      Alert.alert("Erro", error.message); // O erro vem do serviço
     }
   };
 
@@ -202,7 +219,7 @@ export default function HomeScreen() {
     const mesa = mesas.find((m) => m.id === mesaId);
     if (!mesaSelecionada) {
       setMesaSelecionada(mesaId);
-      const isJuntada = mesa && mesa.numero.includes("-");
+      const isJuntada = mesa && String(mesa.numeroMesa).includes("-"); // Ajustado para numeroMesa
       Alert.alert(
         "Mesa Selecionada",
         isJuntada
@@ -246,16 +263,16 @@ export default function HomeScreen() {
 
   const separarMesas = async (mesaId) => {
     const mesa = mesas.find((m) => m.id === mesaId);
-    if (!mesa || !mesa.numero.includes("-")) return;
+    if (!mesa || !String(mesa.numeroMesa).includes("-")) return; // Ajustado para numeroMesa
 
-    const [numero1, numero2] = mesa.numero.split("-");
+    const [numero1, numero2] = String(mesa.numeroMesa).split("-"); // Ajustado para numeroMesa
     const [nome1, nome2] = mesa.nomeCliente.split(" & ");
     try {
       const freshDb = await ensureFirebaseInitialized();
       const pedidosSnapshot = await freshDb.ref("pedidos").once("value");
       const todosPedidos = pedidosSnapshot.val() || {};
       const pedidosMesaJunta = Object.entries(todosPedidos)
-        .filter(([_, pedido]) => pedido.mesa === mesa.numero)
+        .filter(([_, pedido]) => pedido.mesa === mesa.numeroMesa) // Ajustado para numeroMesa
         .map(([id, pedido]) => ({ id, ...pedido }));
 
       const pedidosMesa1 = pedidosMesaJunta.filter(
@@ -271,7 +288,7 @@ export default function HomeScreen() {
       }
 
       const novaMesa1 = {
-        numero: numero1,
+        numeroMesa: numero1, // Ajustado para numeroMesa
         nomeCliente: nome1,
         posX: mesa.posX || 0,
         posY: (mesa.posY || 0) - 50,
@@ -279,7 +296,7 @@ export default function HomeScreen() {
         createdAt: mesa.createdAt,
       };
       const novaMesa2 = {
-        numero: numero2,
+        numeroMesa: numero2, // Ajustado para numeroMesa
         nomeCliente: nome2,
         posX: mesa.posX || 0,
         posY: (mesa.posY || 0) + 50,
@@ -374,7 +391,7 @@ export default function HomeScreen() {
       return;
     }
 
-    const mesaPedidos = pedidos.filter((p) => p.mesa === mesa.numero);
+    const mesaPedidos = pedidos.filter((p) => p.mesa === mesa.numeroMesa); // Ajustado para numeroMesa
     const temPedidosAbertos = mesaPedidos.some((p) => !p.entregue);
 
     if (mesa.status === "aberta" && mesaPedidos.length > 0) {
@@ -394,7 +411,7 @@ export default function HomeScreen() {
     }
 
     try {
-      await removerPedidosDaMesa(mesa.numero);
+      await removerPedidosDaMesa(mesa.numeroMesa); // Ajustado para numeroMesa
       await removerMesa(mesaId);
       setMesas((prevMesas) => prevMesas.filter((m) => m.id !== mesaId));
       if (mesaDetalhes && mesaDetalhes.id === mesaId) {
@@ -535,7 +552,9 @@ export default function HomeScreen() {
               return numA - numB;
             })
             .map((mesa) => {
-              const mesaPedidos = pedidos.filter((p) => p.mesa === mesa.numero);
+              const mesaPedidos = pedidos.filter(
+                (p) => p.mesa === mesa.numeroMesa
+              ); // Ajustado para numeroMesa
               return (
                 <Mesa
                   key={mesa.id}
@@ -558,7 +577,7 @@ export default function HomeScreen() {
             visible={detalhesVisible}
             onClose={() => setDetalhesVisible(false)}
             mesa={mesaDetalhes}
-            pedidos={pedidos.filter((p) => p.mesa === mesaDetalhes.numero)}
+            pedidos={pedidos.filter((p) => p.mesa === mesaDetalhes.numeroMesa)} // Ajustado para numeroMesa
             onAdicionarPedido={handleAdicionarPedido}
             onAtualizarMesa={handleAtualizarMesa}
           />

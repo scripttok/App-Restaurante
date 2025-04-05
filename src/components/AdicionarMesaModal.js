@@ -7,22 +7,17 @@ export default function AdicionarMesaModal({ visible, onClose, onAdicionar }) {
 
   // Função para gerar um número aleatório entre 1 e 999
   const gerarNumeroMesa = () => {
-    return Math.floor(Math.random() * 999) + 1;
+    return Math.floor(Math.random() * 9999) + 1; // Gera entre 1 e 9999
   };
 
   const handleAdicionar = async () => {
     if (nomeCliente) {
       try {
-        const numeroMesa = gerarNumeroMesa(); // Gera o número dinamicamente
+        const numeroMesa = gerarNumeroMesa();
         const mesaData = { nomeCliente, numeroMesa };
-
-        // Usa a função do mesaService para adicionar ao Realtime Database
+        console.log("(NOBRIDGE) LOG Mesa a ser adicionada:", mesaData); // Log para depuração
         const mesaId = await adicionarMesaNoFirebase(mesaData);
-
-        // Chama a função onAdicionar para atualizar a UI, se necessário
         onAdicionar({ ...mesaData, id: mesaId });
-
-        // Limpa o campo e fecha o modal
         setNomeCliente("");
         onClose();
       } catch (error) {

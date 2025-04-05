@@ -36,8 +36,35 @@ const waitForConnection = async (db, timeout = 5000) => {
 };
 
 export const adicionarMesaNoFirebase = async (mesa) => {
-  const freshDb = await ensureFirebaseInitialized(); // Verifique se isso retorna o objeto firebase.database()
-  await waitForConnection(freshDb); // Verifique se isso funciona corretamente
+  const freshDb = await ensureFirebaseInitialized();
+  await waitForConnection(freshDb);
+
+  // Verifica se o numeroMesa já existe
+  const numeroMesaExistente = await verificarNumeroMesaExistente(
+    mesa.numeroMesa
+  );
+  if (numeroMesaExistente) {
+    console.log(
+      "(NOBRIDGE) LOG Mesa rejeitada por número duplicado:",
+      mesa.numeroMesa
+    );
+    throw new Error(`Já existe uma mesa com o número "${mesa.numeroMesa}".`);
+  }
+
+  // Verifica se o nomeCliente já existe (opcional, se você quer manter essa restrição)
+  const snapshot = await freshDb.ref("mesas").once("value");
+  const mesasExistentes = snapshot.val() || {};
+  const nomeClienteExistente = Object.values(mesasExistentes).some(
+    (m) => m.nomeCliente === mesa.nomeCliente
+  );
+  if (nomeClienteExistente) {
+    console.log(
+      "(NOBRIDGE) LOG Mesa rejeitada por nome duplicado:",
+      mesa.nomeCliente
+    );
+    throw new Error(`Já existe uma mesa com o cliente "${mesa.nomeCliente}".`);
+  }
+
   console.log("(NOBRIDGE) LOG Adicionando mesa ao Firebase:", mesa);
   return freshDb
     .ref("mesas")
@@ -503,6 +530,27 @@ export const adicionarNovoItemEstoque = async (
     console.error("(NOBRIDGE) ERROR Falha ao adicionar ao estoque:", error);
     throw error;
   }
+};
+
+// mesaService.js
+export const verificarNumeroMesaExistente = async (numeroMesa) => {
+  const freshDb = await ensureFirebaseInitialized();
+  const snapshot = await freshDb.ref("mesas").once("value");
+  const mesasExistentes = snapshot.val() || {};
+  console.log("(NOBRIDGE) LOG Mesas existentes no Firebase:", mesasExistentes);
+
+  if (!mesasExistentes || Object.keys(mesasExistentes).length === 0) {
+    console.log("(NOBRIDGE) LOG Nenhuma mesa encontrada, retornando false");
+    return false;
+  }
+
+  const numeroMesaNum = Number(numeroMesa); // Converte para número
+  const resultado = Object.values(mesasExistentes).some(
+    (mesa) =>
+      mesa.numeroMesa !== undefined && Number(mesa.numeroMesa) === numeroMesaNum
+  );
+  console.log("(NOBRIDGE) LOG Resultado da verificação:", resultado);
+  return resultado;
 };
 
 export const removerEstoque = async (itemId, quantidade) => {
