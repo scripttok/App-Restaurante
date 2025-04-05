@@ -1,19 +1,36 @@
 import React, { useState } from "react";
 import { Modal, View, Text, TextInput, Button, StyleSheet } from "react-native";
+import { adicionarMesaNoFirebase } from "../services/mesaService"; // Importe a função do serviço
 
-// Single Responsibility: Gerenciar o formulário de adicionar mesa
 export default function AdicionarMesaModal({ visible, onClose, onAdicionar }) {
   const [nomeCliente, setNomeCliente] = useState("");
-  const [numeroMesa, setNumeroMesa] = useState("");
 
-  const handleAdicionar = () => {
-    if (nomeCliente && numeroMesa) {
-      onAdicionar({ nomeCliente, numeroMesa });
-      setNomeCliente("");
-      setNumeroMesa("");
-      onClose();
+  // Função para gerar um número aleatório entre 1 e 999
+  const gerarNumeroMesa = () => {
+    return Math.floor(Math.random() * 999) + 1;
+  };
+
+  const handleAdicionar = async () => {
+    if (nomeCliente) {
+      try {
+        const numeroMesa = gerarNumeroMesa(); // Gera o número dinamicamente
+        const mesaData = { nomeCliente, numeroMesa };
+
+        // Usa a função do mesaService para adicionar ao Realtime Database
+        const mesaId = await adicionarMesaNoFirebase(mesaData);
+
+        // Chama a função onAdicionar para atualizar a UI, se necessário
+        onAdicionar({ ...mesaData, id: mesaId });
+
+        // Limpa o campo e fecha o modal
+        setNomeCliente("");
+        onClose();
+      } catch (error) {
+        console.error("Erro ao adicionar mesa:", error);
+        alert("Erro ao adicionar a mesa. Tente novamente.");
+      }
     } else {
-      alert("Preencha todos os campos!");
+      alert("Preencha o nome do cliente!");
     }
   };
 
@@ -27,13 +44,6 @@ export default function AdicionarMesaModal({ visible, onClose, onAdicionar }) {
             placeholder="Nome do Cliente"
             value={nomeCliente}
             onChangeText={setNomeCliente}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Número da Mesa"
-            value={numeroMesa}
-            onChangeText={setNumeroMesa}
-            keyboardType="numeric"
           />
           <View style={styles.botoes}>
             <Button title="Cancelar" onPress={onClose} color="#ff4444" />

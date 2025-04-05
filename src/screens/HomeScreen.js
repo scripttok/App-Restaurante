@@ -524,8 +524,14 @@ export default function HomeScreen() {
               mesa.nomeCliente.toLowerCase().includes(searchText.toLowerCase())
             )
             .sort((a, b) => {
-              const numA = parseInt(a.numero.match(/\d+/)[0], 10);
-              const numB = parseInt(b.numero.match(/\d+/)[0], 10);
+              const numA = parseInt(
+                String(a.numeroMesa).match(/\d+/)?.[0] || "0",
+                10
+              );
+              const numB = parseInt(
+                String(b.numeroMesa).match(/\d+/)?.[0] || "0",
+                10
+              );
               return numA - numB;
             })
             .map((mesa) => {

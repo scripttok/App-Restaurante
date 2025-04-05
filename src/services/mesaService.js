@@ -36,8 +36,8 @@ const waitForConnection = async (db, timeout = 5000) => {
 };
 
 export const adicionarMesaNoFirebase = async (mesa) => {
-  const freshDb = await ensureFirebaseInitialized();
-  await waitForConnection(freshDb);
+  const freshDb = await ensureFirebaseInitialized(); // Verifique se isso retorna o objeto firebase.database()
+  await waitForConnection(freshDb); // Verifique se isso funciona corretamente
   console.log("(NOBRIDGE) LOG Adicionando mesa ao Firebase:", mesa);
   return freshDb
     .ref("mesas")
