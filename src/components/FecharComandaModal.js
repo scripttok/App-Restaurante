@@ -16,7 +16,7 @@ import {
   removerPedidosDaMesa,
 } from "../services/mesaService";
 import * as FileSystem from "expo-file-system";
-import * as Sharing from "expo-sharing";
+import { salvarHistoricoPedido } from "../services/mesaService";
 
 export default function FecharComandaModal({
   visible,
@@ -31,8 +31,9 @@ export default function FecharComandaModal({
   const [valorRecebido, setValorRecebido] = useState("");
   const [divisao, setDivisao] = useState("1");
   const [telefoneCliente, setTelefoneCliente] = useState("");
-  const [desconto, setDesconto] = useState(""); // Novo estado para o desconto
+  const [desconto, setDesconto] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [metodoPagamento, setMetodoPagamento] = useState("dinheiro");
 
   useEffect(() => {
     return () => {
@@ -74,9 +75,9 @@ export default function FecharComandaModal({
   };
 
   const calcularDivisao = () => {
-    const totalComDesconto = parseFloat(calcularTotalComDesconto());
+    const restante = parseFloat(calcularRestante());
     const numDivisao = parseInt(divisao) || 1;
-    return (totalComDesconto / numDivisao).toFixed(2);
+    return (restante / numDivisao).toFixed(2);
   };
 
   const calcularTroco = () => {
@@ -118,7 +119,7 @@ export default function FecharComandaModal({
       };
     });
     return {
-      numero: mesa?.numero || "N/A",
+      numeroMesa: mesa?.numeroMesa || "N/A", // Adicionado numeroMesa
       nomeCliente: mesa?.nomeCliente || "N/A",
       itens,
       totalSemDesconto: calcularTotalSemDesconto(),
@@ -129,98 +130,39 @@ export default function FecharComandaModal({
     };
   };
 
-  const gerarConteudoCSV = () => {
+  const salvarPedidoNoHistorico = async (dadosPedido) => {
     try {
-      const resumo = getResumoConta();
-      console.log("(NOBRIDGE) LOG Gerando CSV com resumo:", resumo);
+      const dataAtual = new Date().toISOString();
+      const nomeArquivo = `pedido_mesa_${mesa.id}_${dataAtual.replace(
+        /[:.]/g,
+        "-"
+      )}.json`;
+      const caminhoArquivo = `${FileSystem.documentDirectory}${nomeArquivo}`;
 
-      let csvContent = "Mesa,Item,Quantidade,Preço Unitário,Subtotal\n";
-      resumo.itens.forEach((item) => {
-        csvContent += `${resumo.numero},${item.item},${
-          item.quantidade
-        },${item.precoUnitario.toFixed(2)},${item.subtotal.toFixed(2)}\n`;
-      });
-
-      // Garantir que os valores sejam números antes de formatar
-      const totalSemDesconto = parseFloat(resumo.totalSemDesconto) || 0;
-      const desconto = parseFloat(resumo.desconto) || 0;
-      const total = parseFloat(resumo.total) || 0;
-      const pago = parseFloat(resumo.pago) || 0;
-      const restante = parseFloat(resumo.restante) || 0;
-
-      csvContent += `,,Total Sem Desconto,,${totalSemDesconto.toFixed(2)}\n`;
-      csvContent += `,,Desconto,,${desconto.toFixed(2)}\n`;
-      csvContent += `,,Total Geral,,${total.toFixed(2)}\n`;
-      csvContent += `,,Pago,,${pago.toFixed(2)}\n`;
-      csvContent += `,,Restante,,${restante.toFixed(2)}\n`;
-
-      console.log("(NOBRIDGE) LOG Conteúdo CSV gerado:", csvContent);
-      return csvContent;
-    } catch (error) {
-      console.error("(NOBRIDGE) ERROR Erro ao gerar conteúdo CSV:", error);
-      throw error;
-    }
-  };
-
-  const exportarCSV = async () => {
-    try {
-      const csvContent = gerarConteudoCSV();
-      const fileName = `comanda_mesa_${mesa?.numero || "desconhecida"}.csv`;
-      const filePath = `${FileSystem.cacheDirectory}${fileName}`; // Direto no cacheDirectory
-
-      // Escrever o arquivo
-      await FileSystem.writeAsStringAsync(filePath, csvContent, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
-      console.log("(NOBRIDGE) LOG Arquivo CSV salvo em:", filePath);
-
-      // Verificar se o compartilhamento tá disponível
-      const isAvailable = await Sharing.isAvailableAsync();
-      if (!isAvailable) {
-        Alert.alert("Erro", "Compartilhamento não disponível no dispositivo.");
-        return;
-      }
-
-      // Compartilhar o arquivo
-      await Sharing.shareAsync(filePath, {
-        mimeType: "text/csv",
-        dialogTitle: "Compartilhar Comanda CSV",
-      });
-
-      console.log("(NOBRIDGE) LOG CSV compartilhado com sucesso");
-      Alert.alert(
-        "Sucesso",
-        `Comanda exportada como ${fileName} e pronta para compartilhar!`
+      await FileSystem.writeAsStringAsync(
+        caminhoArquivo,
+        JSON.stringify({
+          ...dadosPedido,
+          dataFechamento: dataAtual,
+          fileName: nomeArquivo,
+        })
       );
+
+      console.log("Pedido salvo no histórico:", nomeArquivo);
     } catch (error) {
-      console.error(
-        "(NOBRIDGE) ERROR Erro ao exportar ou compartilhar CSV:",
-        error
-      );
-      Alert.alert("Erro", `Falha ao exportar CSV: ${error.message}`);
+      console.error("Erro ao salvar pedido no histórico:", error);
       throw error;
     }
   };
 
   const handleFecharComanda = async () => {
     if (!mesa || isSubmitting) return;
+
     const totalSemDesconto = parseFloat(calcularTotalSemDesconto());
     const descontoNum = parseFloat(desconto) || 0;
-    if (descontoNum > totalSemDesconto) {
-      Alert.alert(
-        "Erro",
-        "O desconto não pode ser maior que o total sem desconto."
-      );
-      return;
-    }
-    if (!isPagamentoSuficiente()) {
-      Alert.alert(
-        "Erro",
-        "O valor recebido deve ser maior ou igual ao restante a pagar para fechar a comanda."
-      );
-      return;
-    }
+
     setIsSubmitting(true);
+
     try {
       const totalComDesconto = parseFloat(calcularTotalComDesconto());
       const pagoAnterior = mesa?.valorPago || 0;
@@ -229,72 +171,69 @@ export default function FecharComandaModal({
       const troco = calcularTroco();
       const pagoTotal = pagoAnterior + pagoNovo;
 
-      console.log("Fechando comanda:", {
-        mesaId: mesa.id,
+      const dataFechamento = new Date().toISOString();
+      const historicoPagamentos = mesa.historicoPagamentos || [];
+
+      if (pagoNovo > 0) {
+        historicoPagamentos.push({
+          valor: pagoNovo,
+          metodo: metodoPagamento,
+          data: dataFechamento,
+        });
+      }
+
+      const dadosParaHistorico = {
+        numeroMesa: mesa.numeroMesa, // Adicionado numeroMesa
+        nomeCliente: mesa.nomeCliente,
+        itens: getResumoConta().itens,
         totalSemDesconto,
         desconto: descontoNum,
-        totalComDesconto,
-        pagoAnterior,
-        pagoNovo,
-        pagoTotal,
+        total: totalComDesconto,
         recebido,
         troco,
-      });
-
-      // Preparar os dados do pedido para salvar
-      const pedidoData = {
-        numero: mesa.numero,
-        nomeCliente: mesa.nomeCliente,
-        totalSemDesconto: totalSemDesconto,
-        desconto: descontoNum,
-        total: totalComDesconto,
-        pago: pagoTotal,
-        recebido: recebido,
-        troco: troco,
-        dataFechamento: new Date().toISOString(), // Adiciona a data de fechamento
-        itens: pedidos.flatMap((p) => p.itens || []), // Inclui os itens do pedido
+        dataFechamento,
+        historicoPagamentos,
       };
 
-      // Salvar os dados no armazenamento local
-      const fileName = `pedido_mesa_${mesa.numero}_${Date.now()}.json`; // Nome único com timestamp
-      const filePath = `${FileSystem.documentDirectory}${fileName}`;
-      await FileSystem.writeAsStringAsync(
-        filePath,
-        JSON.stringify(pedidoData),
-        {
-          encoding: FileSystem.EncodingType.UTF8,
-        }
-      );
-      console.log("(NOBRIDGE) LOG Pedido salvo localmente em:", filePath);
+      console.log("Dados completos para histórico:", dadosParaHistorico);
 
-      // Atualizar a mesa no Firebase e remover pedidos
-      const updates = {
+      await salvarHistoricoPedido(dadosParaHistorico);
+      await removerPedidosDaMesa(mesa.id);
+
+      await fecharMesa(mesa.id, {
         valorPago: pagoTotal,
         valorRestante: 0,
         valorRecebido: recebido,
         troco,
         desconto: descontoNum,
         status: "fechada",
-      };
-      await removerPedidosDaMesa(mesa.numero);
-      await fecharMesa(mesa.id, updates);
+        historicoPagamentos,
+      });
 
-      // Atualizar a mesa no componente pai e fechar o modal
-      onAtualizarMesa({ ...mesa, ...updates });
+      onAtualizarMesa({
+        ...mesa,
+        valorPago: pagoTotal,
+        valorRestante: 0,
+        valorRecebido: recebido,
+        troco,
+        desconto: descontoNum,
+        status: "fechada",
+        historicoPagamentos,
+      });
+
+      Alert.alert("Sucesso", "Comanda fechada com sucesso!");
       onFecharComanda();
-
-      Alert.alert("Sucesso", "Comanda fechada e salva no histórico!");
     } catch (error) {
+      console.error("Erro completo ao fechar comanda:", error);
       Alert.alert(
         "Erro",
         `Não foi possível fechar a comanda: ${error.message}`
       );
-      console.error("(NOBRIDGE) ERROR Erro ao fechar comanda:", error);
     } finally {
       setIsSubmitting(false);
+      setDesconto("");
       setValorPago("");
       setValorRecebido("");
-      setDesconto("");
     }
   };
 
@@ -327,13 +266,23 @@ export default function FecharComandaModal({
       const troco =
         recebido > pagoNovo ? (recebido - pagoNovo).toFixed(2) : "0.00";
 
+      const historicoPagamentos = mesa.historicoPagamentos || [];
+      if (pagoNovo > 0) {
+        historicoPagamentos.push({
+          valor: pagoNovo,
+          metodo: metodoPagamento,
+          data: new Date().toISOString(),
+        });
+      }
+
       const updates = {
         valorPago: pagoTotal,
         valorRestante: restante,
         valorRecebido: recebido,
         troco,
-        desconto: descontoNum, // Inclui o desconto nos dados salvos
+        desconto: descontoNum,
         status: "aberta",
+        historicoPagamentos,
       };
 
       console.log(
@@ -341,10 +290,6 @@ export default function FecharComandaModal({
         updates
       );
       await fecharMesa(mesa.id, updates);
-      console.log(
-        "Após fecharMesa, atualização enviada para mesaAtual:",
-        updates
-      );
 
       Alert.alert(
         "Sucesso",
@@ -356,12 +301,9 @@ export default function FecharComandaModal({
         ...mesa,
         ...updates,
       });
-      console.log(
-        "Pagamento parcial registrado, status mantido como 'aberta', mesaAtual atualizada"
-      );
       setValorPago("");
       setValorRecebido("");
-      setDesconto(""); // Limpa o campo de desconto
+      setDesconto("");
     } catch (error) {
       Alert.alert(
         "Erro",
@@ -378,19 +320,14 @@ export default function FecharComandaModal({
       Alert.alert("Erro", "Nenhum pedido para enviar.");
       return;
     }
+
     const totalSemDesconto = parseFloat(calcularTotalSemDesconto());
     const descontoNum = parseFloat(desconto) || 0;
+
     if (descontoNum > totalSemDesconto) {
       Alert.alert(
         "Erro",
         "O desconto não pode ser maior que o total sem desconto."
-      );
-      return;
-    }
-    if (!isPagamentoSuficiente()) {
-      Alert.alert(
-        "Erro",
-        "O valor recebido deve ser maior ou igual ao restante para enviar via WhatsApp."
       );
       return;
     }
@@ -400,9 +337,11 @@ export default function FecharComandaModal({
       Alert.alert("Erro", "Por favor, insira um número de telefone.");
       return;
     }
+
     if (!numeroLimpo.startsWith("+")) {
       numeroLimpo = `+55${numeroLimpo}`;
     }
+
     if (
       numeroLimpo.length < 12 ||
       (numeroLimpo.startsWith("+55") && numeroLimpo.length < 13)
@@ -417,7 +356,7 @@ export default function FecharComandaModal({
     setIsSubmitting(true);
     try {
       const whatsappUrl = enviarComandaViaWhatsApp(
-        mesa.numero,
+        mesa.id,
         pedidos,
         cardapio,
         numeroLimpo
@@ -426,32 +365,7 @@ export default function FecharComandaModal({
       const supported = await Linking.canOpenURL(whatsappUrl);
       if (supported) {
         await Linking.openURL(whatsappUrl);
-
-        const totalComDesconto = parseFloat(calcularTotalComDesconto());
-        const pagoAnterior = parseFloat(mesa?.valorPago || 0);
-        const pagoNovo = parseFloat(valorPago) || totalComDesconto;
-        const recebido = parseFloat(valorRecebido) || 0;
-        const troco = calcularTroco();
-        const pagoTotal = pagoAnterior + pagoNovo;
-
-        const updates = {
-          valorPago: pagoTotal,
-          valorRestante: 0,
-          valorRecebido: recebido,
-          troco,
-          desconto: descontoNum, // Inclui o desconto nos dados salvos
-          status: "fechada",
-        };
-
-        await removerPedidosDaMesa(mesa.numero);
-        await fecharMesa(mesa.id, updates);
-        onAtualizarMesa({
-          ...mesa,
-          ...updates,
-        });
-
-        Alert.alert("Sucesso", "Comanda enviada via WhatsApp e fechada!");
-        onFecharComanda();
+        Alert.alert("Sucesso", "Comanda enviada via WhatsApp!");
       } else {
         Alert.alert(
           "Erro",
@@ -461,12 +375,11 @@ export default function FecharComandaModal({
     } catch (error) {
       Alert.alert(
         "Erro",
-        `Não foi possível enviar via WhatsApp ou fechar a comanda: ${error.message}`
+        `Não foi possível enviar via WhatsApp: ${error.message}`
       );
       console.error("Erro ao enviar via WhatsApp:", error);
     } finally {
       setIsSubmitting(false);
-      setDesconto(""); // Limpa o campo de desconto
     }
   };
 
@@ -489,7 +402,8 @@ export default function FecharComandaModal({
         <View style={styles.modalContent}>
           <ScrollView contentContainerStyle={styles.scrollContent}>
             <Text style={styles.titulo}>
-              Fechar Comanda - Mesa {mesa?.numero}
+              Fechar Comanda - Mesa {mesa?.numeroMesa || "N/A"} -{" "}
+              {mesa?.nomeCliente || "Cliente"}
             </Text>
             <Text style={styles.totalGeral}>
               Total R$ {calcularTotalSemDesconto()}
@@ -564,14 +478,6 @@ export default function FecharComandaModal({
               placeholderTextColor="#888"
             />
             <View style={styles.botoes}>
-              <CustomButton
-                title="Exportar CSV"
-                onPress={async () => {
-                  await exportarCSV();
-                }}
-                color="#1E90FF" // Azul pra destacar
-                disabled={isSubmitting || pedidos.length === 0}
-              />
               <CustomButton
                 title="Enviar via WhatsApp"
                 onPress={handleEnviarWhatsApp}
@@ -655,12 +561,6 @@ const styles = StyleSheet.create({
     textAlign: "left",
   },
   divisao: {
-    fontSize: 16,
-    color: "#FFA500",
-    textAlign: "center",
-    marginVertical: 10,
-  },
-  restante: {
     fontSize: 16,
     color: "#FFA500",
     textAlign: "center",

@@ -895,3 +895,98 @@ export const removerPedidosDaMesa = async (mesaNumero) => {
     throw error;
   }
 };
+export const salvarHistoricoPedido = async (dadosPedido) => {
+  const freshDb = await ensureFirebaseInitialized();
+  try {
+    const historicoRef = freshDb.ref("historicoPedidos");
+
+    const novoHistorico = {
+      nomeCliente: dadosPedido.nomeCliente,
+      itens: Array.isArray(dadosPedido.itens)
+        ? dadosPedido.itens
+        : Object.values(dadosPedido.itens || {}),
+      totalSemDesconto: dadosPedido.totalSemDesconto,
+      desconto: dadosPedido.desconto,
+      total: dadosPedido.total,
+      recebido: dadosPedido.recebido,
+      troco: dadosPedido.troco,
+      dataFechamento: firebase.database.ServerValue.TIMESTAMP,
+      historicoPagamentos: Array.isArray(dadosPedido.historicoPagamentos)
+        ? dadosPedido.historicoPagamentos
+        : [],
+    };
+
+    if (
+      dadosPedido.pago > 0 &&
+      novoHistorico.historicoPagamentos.length === 0
+    ) {
+      novoHistorico.historicoPagamentos.push({
+        valor: dadosPedido.pago,
+        metodo: dadosPedido.metodoPagamento || "dinheiro",
+        data: new Date().toISOString(),
+      });
+    }
+
+    const novoHistoricoRef = historicoRef.push();
+    await novoHistoricoRef.set(novoHistorico);
+
+    console.log(
+      "Histórico salvo com ID:",
+      novoHistoricoRef.key,
+      "Dados:",
+      novoHistorico
+    );
+    return novoHistoricoRef.key;
+  } catch (error) {
+    console.error("Erro ao salvar histórico:", error);
+    throw error;
+  }
+};
+export const getHistoricoPedidos = (callback) => {
+  let ref;
+  const setupListener = async () => {
+    try {
+      const freshDb = await ensureFirebaseInitialized();
+      ref = freshDb.ref("historicoPedidos");
+
+      ref
+        .orderByChild("dataFechamento")
+        .limitToLast(100)
+        .on(
+          "value",
+          (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+              const historico = Object.entries(data).map(([id, value]) => ({
+                id,
+                ...value,
+                dataFechamento: value.dataFechamento
+                  ? new Date(value.dataFechamento).toISOString()
+                  : "",
+              }));
+              historico.sort((a, b) =>
+                b.dataFechamento.localeCompare(a.dataFechamento)
+              );
+              callback(historico);
+            } else {
+              callback([]);
+            }
+          },
+          (error) => {
+            console.error("Erro ao obter histórico:", error);
+            callback([]);
+          }
+        );
+    } catch (error) {
+      console.error("Erro ao inicializar Firebase:", error);
+      callback([]);
+    }
+  };
+
+  setupListener();
+  return () => {
+    if (ref) {
+      ref.off("value");
+    }
+  };
+};
